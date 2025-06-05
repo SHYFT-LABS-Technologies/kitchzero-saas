@@ -6,12 +6,12 @@ import { ValidationErrorDetail } from "@/components/ui/toast-notification"
 export function handleApiError(error: unknown) {
   console.error('API Error:', error)
 
-  if (error instanceof ValidationError) {
+    if (error instanceof ValidationError) {
     return NextResponse.json(
       {
         error: 'Validation failed',
         details: error.errors.map(err => ({
-          field: err.path.join('.'),
+          field: err.path.join('.') || 'root',
           message: err.message
         }))
       },
@@ -24,7 +24,7 @@ export function handleApiError(error: unknown) {
       {
         error: 'Validation failed',
         details: error.errors.map(err => ({
-          field: err.path.join('.'),
+          field: err.path.join('.') || 'root',
           message: err.message
         }))
       },

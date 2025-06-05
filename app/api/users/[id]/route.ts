@@ -135,8 +135,8 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       branchId: validatedData.role === "BRANCH_ADMIN" ? validatedData.branchId : null,
     }
 
-    // Only update password if provided
-    if (validatedData.password) {
+    // Only update password if provided and not empty
+    if (validatedData.password && validatedData.password.trim() !== "") {
       updateData.password = await hashPassword(validatedData.password)
     }
 

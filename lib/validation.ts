@@ -75,10 +75,12 @@ export const updateUserSchema = z.object({
   password: z.string()
     .min(6, "Password must be at least 6 characters")
     .max(100, "Password is too long")
-    .optional(),
+    .optional()
+    .or(z.literal("")), // Allow empty string for "no password change"
   role: userRoleSchema,
-  branchId: uuidSchema.optional()
+  branchId: uuidSchema.optional().nullable()
 }).refine((data) => {
+  // Only require branchId if role is BRANCH_ADMIN
   if (data.role === 'BRANCH_ADMIN' && !data.branchId) {
     return false
   }
@@ -98,6 +100,27 @@ export const branchSchema = z.object({
     .min(1, "Location is required")
     .max(200, "Location must be less than 200 characters")
     .trim()
+})
+
+
+// Add a new schema specifically for UPDATE operations
+export const updateBranchSchema = z.object({
+  name: z.string()
+    .min(1, "Branch name is required")
+    .max(100, "Branch name must be less than 100 characters")
+    .trim()
+    .optional(),
+  location: z.string()
+    .min(1, "Location is required")
+    .max(200, "Location must be less than 200 characters")
+    .trim()
+    .optional()
+}).refine((data) => {
+  // Ensure at least one field is provided for update
+  return data.name !== undefined || data.location !== undefined
+}, {
+  message: "At least one field (name or location) must be provided for update",
+  path: ["root"]
 })
 
 // Inventory validation schemas
