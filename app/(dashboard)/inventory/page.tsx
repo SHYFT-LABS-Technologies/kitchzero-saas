@@ -77,8 +77,8 @@ export default function InventoryPage() {
   }, [user])
 
   const fetchInventory = async () => {
-    setLoading(true)
     try {
+      setLoading(true)
       const response = await fetch("/api/inventory", {
         cache: "no-store",
         headers: {
@@ -88,21 +88,12 @@ export default function InventoryPage() {
       if (response.ok) {
         const data = await response.json()
         setInventory(data.inventory)
-        addToast({
-          type: "success",
-          title: "Data Refreshed",
-          message: "Inventory data has been refreshed successfully.",
-        })
       } else {
         throw new Error("Failed to fetch inventory")
       }
     } catch (error) {
       console.error("Failed to fetch inventory:", error)
-      addToast({
-        type: "error",
-        title: "Error",
-        message: "Failed to refresh inventory. Please try again.",
-      })
+      throw error
     } finally {
       setLoading(false)
     }
@@ -117,6 +108,26 @@ export default function InventoryPage() {
       }
     } catch (error) {
       console.error("Failed to fetch branches:", error)
+    }
+  }
+
+  const refreshData = async () => {
+    try {
+      await fetchInventory()
+      if (user?.role === "SUPER_ADMIN") {
+        await fetchBranches()
+      }
+      addToast({
+        type: "success",
+        title: "Data Refreshed",
+        message: "Inventory data has been refreshed successfully.",
+      })
+    } catch (error) {
+      addToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to refresh inventory. Please try again.",
+      })
     }
   }
 
@@ -371,12 +382,7 @@ export default function InventoryPage() {
 
               <div className="mt-6 lg:mt-0 flex items-center space-x-3">
                 <button
-                  onClick={() => {
-                    fetchInventory()
-                    if (user?.role === "SUPER_ADMIN") {
-                      fetchBranches()
-                    }
-                  }}
+                  onClick={refreshData}
                   disabled={loading}
                   className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 font-medium text-sm shadow-sm ${
                     loading ? "opacity-50 cursor-not-allowed" : "hover:shadow-md"

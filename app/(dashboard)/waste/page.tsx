@@ -103,14 +103,14 @@ export default function WastePage() {
   })
 
   useEffect(() => {
-    fetchWasteLogs()
+    fetchWasteLogs(false) // Don't show toast on initial load
     if (user?.role === "SUPER_ADMIN") {
       fetchBranches()
       fetchReviews()
     }
   }, [user])
 
-  const fetchWasteLogs = async () => {
+  const fetchWasteLogs = async (showToast = false) => {
     setLoading(true)
     try {
       const response = await fetch("/api/waste-logs", {
@@ -122,11 +122,15 @@ export default function WastePage() {
       if (response.ok) {
         const data = await response.json()
         setWasteLogs(data.wasteLogs)
-        addToast({
-          type: "success",
-          title: "Data Refreshed",
-          message: "Waste logs have been refreshed successfully.",
-        })
+
+        // Only show toast if explicitly requested (manual refresh)
+        if (showToast) {
+          addToast({
+            type: "success",
+            title: "Data Refreshed",
+            message: "Waste logs have been refreshed successfully.",
+          })
+        }
       } else {
         throw new Error('Failed to fetch waste logs')
       }
@@ -192,7 +196,7 @@ export default function WastePage() {
         }
         setShowForm(false)
         resetForm()
-        fetchWasteLogs()
+        fetchWasteLogs(false) // Don't show refresh toast, we already show create success
         if (user?.role === "SUPER_ADMIN") {
           fetchReviews()
         }
@@ -235,7 +239,7 @@ export default function WastePage() {
         }
         setEditingLog(null)
         resetForm()
-        fetchWasteLogs()
+        fetchWasteLogs(false) // Don't show refresh toast, we already show update success
         if (user?.role === "SUPER_ADMIN") {
           fetchReviews()
         }
@@ -278,7 +282,7 @@ export default function WastePage() {
           })
         }
         setDeleteModal({ isOpen: false, wasteLog: null, isLoading: false })
-        fetchWasteLogs()
+        fetchWasteLogs(false) // Don't show refresh toast, we already show delete success
         if (user?.role === "SUPER_ADMIN") {
           fetchReviews()
         }
@@ -312,7 +316,7 @@ export default function WastePage() {
           message: `The request has been successfully ${action}d.`,
         })
         fetchReviews()
-        fetchWasteLogs()
+        fetchWasteLogs(false) // Don't show refresh toast, we already show review action success
       }
     } catch (error) {
       console.error("Failed to process review:", error)
@@ -475,7 +479,7 @@ export default function WastePage() {
               <div className="mt-6 lg:mt-0 flex items-center space-x-3">
                 <button
                   onClick={() => {
-                    fetchWasteLogs()
+                    fetchWasteLogs(true) // Show toast for manual refresh only
                     if (user?.role === "SUPER_ADMIN") {
                       fetchBranches()
                       fetchReviews()
@@ -644,8 +648,8 @@ export default function WastePage() {
                   <button
                     onClick={() => setShowFilters(!showFilters)}
                     className={`flex items-center gap-2 px-4 py-3 rounded-xl border transition-all duration-200 font-medium text-sm ${showFilters
-                        ? "bg-kitchzero-primary text-white border-kitchzero-primary shadow-lg"
-                        : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300"
+                      ? "bg-kitchzero-primary text-white border-kitchzero-primary shadow-lg"
+                      : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300"
                       }`}
                   >
                     <Filter className="w-4 h-4" />
@@ -1252,8 +1256,7 @@ export default function WastePage() {
                 <div>
                   <h2 className="text-2xl font-bold">Pending Reviews</h2>
                   <p className="text-white/80 text-sm mt-1">
-                    Review and approve changes requested by branch administrators
-                  </p>
+                    Review and approve changes requested by branch administrators</p>
                 </div>
               </div>
               {reviews.length > 0 && (
@@ -1283,10 +1286,10 @@ export default function WastePage() {
                             <div className="flex items-center gap-3 mb-4">
                               <span
                                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border ${review.action === "CREATE"
-                                    ? "text-emerald-700 bg-emerald-50 border-emerald-200"
-                                    : review.action === "UPDATE"
-                                      ? "text-blue-700 bg-blue-50 border-blue-200"
-                                      : "text-red-700 bg-red-50 border-red-200"
+                                  ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+                                  : review.action === "UPDATE"
+                                    ? "text-blue-700 bg-blue-50 border-blue-200"
+                                    : "text-red-700 bg-red-50 border-red-200"
                                   }`}
                               >
                                 {review.action === "CREATE" && <Plus className="w-3 h-3" />}
