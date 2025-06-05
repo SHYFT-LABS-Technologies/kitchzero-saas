@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/components/auth-provider"
@@ -24,6 +24,8 @@ export default function Navigation() {
   const [isOpen, setIsOpen] = useState(false)
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false)
   const [pendingReviews, setPendingReviews] = useState(0)
+  const userMenuRef = useRef<HTMLDivElement>(null)
+  const userButtonRef = useRef<HTMLButtonElement>(null)
 
   useEffect(() => {
     // Only fetch pending reviews for super admins
@@ -34,6 +36,28 @@ export default function Navigation() {
       return () => clearInterval(interval)
     }
   }, [user])
+
+  // Close mobile menu when route changes
+  useEffect(() => {
+    setIsOpen(false)
+  }, [pathname])
+
+  // Handle clicks outside of user menu
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        userMenuRef.current &&
+        userButtonRef.current &&
+        !userMenuRef.current.contains(event.target as Node) &&
+        !userButtonRef.current.contains(event.target as Node)
+      ) {
+        setIsUserMenuOpen(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [userMenuRef, userButtonRef])
 
   const fetchPendingReviews = async () => {
     try {
@@ -104,24 +128,24 @@ export default function Navigation() {
   return (
     <>
       <nav className="bg-white shadow-sm border-b border-gray-100 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
-            {/* Logo and Navigation */}
-            <div className="flex">
-              <div className="flex-shrink-0 flex items-center">
-                <Link href="/dashboard" className="flex items-center space-x-3 group">
-                  <div className="w-10 h-10 bg-gradient-to-br from-green-600 to-green-700 rounded-xl flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
-                    <ChefHat className="w-6 h-6 text-white" />
-                  </div>
-                  <div className="hidden sm:block">
-                    <h1 className="text-xl font-bold text-gray-900">KitchZero</h1>
-                    <p className="text-xs text-gray-500 -mt-1">Waste Management</p>
-                  </div>
-                </Link>
-              </div>
+            {/* Logo */}
+            <div className="flex items-center">
+              <Link href="/dashboard" className="flex items-center space-x-2.5 group">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-br from-kitchzero-primary to-kitchzero-secondary rounded-xl flex items-center justify-center shadow-sm group-hover:shadow-md transition-shadow">
+                  <ChefHat className="w-5 h-5 sm:w-6 sm:h-6 text-white" />
+                </div>
+                <div className="hidden sm:block">
+                  <h1 className="text-lg sm:text-xl font-bold text-slate-900">KitchZero</h1>
+                  <p className="text-xs text-slate-500 -mt-1">Waste Management</p>
+                </div>
+              </Link>
+            </div>
 
-              {/* Desktop Navigation */}
-              <div className="hidden lg:ml-8 lg:flex lg:items-center lg:space-x-1">
+            {/* Center Navigation */}
+            <div className="hidden lg:flex lg:items-center lg:justify-center lg:flex-1">
+              <div className="flex items-center space-x-1">
                 {navLinks
                   .filter((link) => link.show)
                   .map((link) => (
@@ -130,14 +154,14 @@ export default function Navigation() {
                       href={link.href}
                       className={`relative flex items-center px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                         isActive(link.href)
-                          ? "bg-green-50 text-green-700 border border-green-200"
-                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                          ? "bg-kitchzero-primary/10 text-kitchzero-primary border border-kitchzero-primary/20"
+                          : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
                       }`}
                     >
-                      <span className="mr-3">{link.icon}</span>
+                      <span className="mr-2.5">{link.icon}</span>
                       <span>{link.name}</span>
                       {link.badge && (
-                        <span className="ml-2 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                        <span className="ml-1.5 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
                           {link.badge}
                         </span>
                       )}
@@ -147,12 +171,12 @@ export default function Navigation() {
             </div>
 
             {/* Right side */}
-            <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2 sm:space-x-4">
               {/* Notification Bell for Super Admin */}
               {user?.role === "SUPER_ADMIN" && (
                 <Link
                   href="/reviews"
-                  className="relative p-2 rounded-lg text-gray-500 hover:text-green-600 hover:bg-green-50 transition-all duration-200"
+                  className="relative p-2 rounded-lg text-slate-500 hover:text-kitchzero-primary hover:bg-kitchzero-primary/10 transition-all duration-200"
                   title={`${pendingReviews} pending reviews`}
                 >
                   <Bell className="h-5 w-5" />
@@ -167,36 +191,42 @@ export default function Navigation() {
               {/* User Menu */}
               <div className="relative">
                 <button
+                  ref={userButtonRef}
                   type="button"
-                  className="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all duration-200"
+                  className="flex items-center space-x-2 sm:space-x-3 px-2 sm:px-3 py-2 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-50 transition-all duration-200"
                   onClick={toggleUserMenu}
                 >
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-600 to-green-700 text-white flex items-center justify-center font-semibold text-sm">
+                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-br from-kitchzero-primary to-kitchzero-secondary text-white flex items-center justify-center font-semibold text-sm">
                     {user?.username?.charAt(0).toUpperCase()}
                   </div>
                   <div className="hidden md:block text-left">
-                    <p className="font-medium text-gray-900">{user?.username}</p>
-                    <p className="text-xs text-gray-500">
+                    <p className="font-medium text-slate-900 text-sm">{user?.username}</p>
+                    <p className="text-xs text-slate-500">
                       {user?.role === "SUPER_ADMIN" ? "Super Admin" : "Branch Admin"}
                     </p>
                   </div>
-                  <ChevronDown className="w-4 h-4 text-gray-400" />
+                  <ChevronDown className="w-4 h-4 text-slate-400" />
                 </button>
 
                 {/* User Dropdown */}
                 {isUserMenuOpen && (
-                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50">
-                    <div className="px-4 py-3 border-b border-gray-100">
+                  <div
+                    ref={userMenuRef}
+                    className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-slate-200 py-2 z-50"
+                  >
+                    <div className="px-4 py-3 border-b border-slate-100">
                       <div className="flex items-center space-x-3">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-600 to-green-700 text-white flex items-center justify-center font-semibold">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-kitchzero-primary to-kitchzero-secondary text-white flex items-center justify-center font-semibold">
                           {user?.username?.charAt(0).toUpperCase()}
                         </div>
                         <div>
-                          <p className="font-medium text-gray-900">{user?.username}</p>
-                          <p className="text-sm text-gray-500">
+                          <p className="font-medium text-slate-900">{user?.username}</p>
+                          <p className="text-sm text-slate-500">
                             {user?.role === "SUPER_ADMIN" ? "Super Administrator" : "Branch Administrator"}
                           </p>
-                          {user?.branch && <p className="text-xs text-green-600 font-medium">{user.branch.name}</p>}
+                          {user?.branch && (
+                            <p className="text-xs text-kitchzero-primary font-medium">{user.branch.name}</p>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -218,8 +248,10 @@ export default function Navigation() {
               <div className="lg:hidden">
                 <button
                   type="button"
-                  className="p-2 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-50 transition-colors"
+                  className="p-2 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors"
                   onClick={toggleMenu}
+                  aria-expanded={isOpen}
+                  aria-label="Toggle navigation menu"
                 >
                   {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
                 </button>
@@ -229,8 +261,8 @@ export default function Navigation() {
 
           {/* Mobile Navigation */}
           {isOpen && (
-            <div className="lg:hidden border-t border-gray-100">
-              <div className="py-3 space-y-1">
+            <div className="lg:hidden border-t border-slate-100 animate-fadeIn">
+              <div className="py-2 space-y-1">
                 {navLinks
                   .filter((link) => link.show)
                   .map((link) => (
@@ -239,8 +271,8 @@ export default function Navigation() {
                       href={link.href}
                       className={`flex items-center justify-between px-4 py-3 rounded-lg text-base font-medium transition-all duration-200 ${
                         isActive(link.href)
-                          ? "bg-green-50 text-green-700"
-                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                          ? "bg-kitchzero-primary/10 text-kitchzero-primary"
+                          : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
                       }`}
                       onClick={() => setIsOpen(false)}
                     >
@@ -249,7 +281,7 @@ export default function Navigation() {
                         <span>{link.name}</span>
                       </div>
                       {link.badge && (
-                        <span className="bg-red-500 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center">
+                        <span className="bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
                           {link.badge}
                         </span>
                       )}
@@ -258,23 +290,23 @@ export default function Navigation() {
               </div>
 
               {/* Mobile User Info */}
-              <div className="border-t border-gray-100 pt-4 pb-3">
+              <div className="border-t border-slate-100 pt-4 pb-3">
                 <div className="flex items-center px-4 space-x-3">
-                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-600 to-green-700 text-white flex items-center justify-center font-semibold">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-kitchzero-primary to-kitchzero-secondary text-white flex items-center justify-center font-semibold">
                     {user?.username?.charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <p className="font-medium text-gray-900">{user?.username}</p>
-                    <p className="text-sm text-gray-500">
+                    <p className="font-medium text-slate-900">{user?.username}</p>
+                    <p className="text-sm text-slate-500">
                       {user?.role === "SUPER_ADMIN" ? "Super Admin" : "Branch Admin"}
                     </p>
-                    {user?.branch && <p className="text-xs text-green-600 font-medium">{user.branch.name}</p>}
+                    {user?.branch && <p className="text-xs text-kitchzero-primary font-medium">{user.branch.name}</p>}
                   </div>
                 </div>
                 <div className="mt-3 px-4">
                   <button
                     onClick={handleLogout}
-                    className="w-full flex items-center space-x-3 px-4 py-2 rounded-lg text-sm text-red-600 hover:bg-red-50 transition-colors"
+                    className="w-full flex items-center justify-center space-x-3 px-4 py-3 rounded-lg text-sm text-white bg-red-600 hover:bg-red-700 transition-colors"
                   >
                     <LogOut className="w-4 h-4" />
                     <span>Sign out</span>
@@ -285,9 +317,6 @@ export default function Navigation() {
           )}
         </div>
       </nav>
-
-      {/* Click outside to close user menu */}
-      {isUserMenuOpen && <div className="fixed inset-0 z-40" onClick={() => setIsUserMenuOpen(false)} />}
     </>
   )
 }
