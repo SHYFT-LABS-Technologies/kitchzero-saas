@@ -1,0 +1,131 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  password  String
+  role      UserRole @default(BRANCH_ADMIN)
+  branchId  String?
+  branch    Branch?  @relation(fields: [branchId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Review system
+  reviewsCreated   WasteLogReview[] @relation("ReviewCreatedBy")
+  reviewsApproved  WasteLogReview[] @relation("ReviewApprovedBy")
+
+  @@map("users")
+}
+
+model Branch {
+  id          String      @id @default(cuid())
+  name        String
+  location    String
+  users       User[]
+  inventory   Inventory[]
+  wasteLogs   WasteLog[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@map("branches")
+}
+
+model Inventory {
+  id           String    @id @default(cuid())
+  itemName     String
+  quantity     Float
+  unit         String
+  expiryDate   DateTime
+  purchaseCost Float
+  branchId     String
+  branch       Branch    @relation(fields: [branchId], references: [id])
+  wasteLogs    WasteLog[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("inventory")
+}
+
+model WasteLog {
+  id          String     @id @default(cuid())
+  itemName    String
+  quantity    Float
+  unit        String
+  value       Float
+  reason      WasteReason
+  photo       String?
+  branchId    String
+  branch      Branch     @relation(fields: [branchId], references: [id])
+  inventoryId String?
+  inventory   Inventory? @relation(fields: [inventoryId], references: [id])
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Review system
+  reviews     WasteLogReview[]
+
+  @@map("waste_logs")
+}
+
+model WasteLogReview {
+  id          String            @id @default(cuid())
+  wasteLogId  String?
+  wasteLog    WasteLog?         @relation(fields: [wasteLogId], references: [id])
+  
+  // Action type
+  action      ReviewAction      // CREATE, UPDATE, DELETE
+  status      ReviewStatus      @default(PENDING)
+  
+  // Original data (for updates/deletes)
+  originalData Json?
+  
+  // New data (for creates/updates)
+  newData     Json?
+  
+  // Review details
+  reason      String?           // Reason for the change
+  createdBy   String
+  creator     User              @relation("ReviewCreatedBy", fields: [createdBy], references: [id])
+  
+  approvedBy  String?
+  approver    User?             @relation("ReviewApprovedBy", fields: [approvedBy], references: [id])
+  
+  reviewNotes String?           // Notes from the reviewer
+  
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  reviewedAt  DateTime?
+
+  @@map("waste_log_reviews")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  BRANCH_ADMIN
+}
+
+enum WasteReason {
+  OVERPRODUCTION
+  SPOILAGE
+  PLATE_WASTE
+  BUFFET_LEFTOVER
+}
+
+enum ReviewAction {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
