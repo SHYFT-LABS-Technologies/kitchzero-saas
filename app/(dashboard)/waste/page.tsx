@@ -33,6 +33,14 @@ import {
   RefreshCw,
   Bell,
   X,
+  Settings,
+  Info,
+  Zap,
+  Target,
+  Activity,
+  ChevronDown,
+  ExternalLink,
+  Upload,
 } from "lucide-react"
 
 interface WasteLogWithBranch extends WasteLog {
@@ -91,7 +99,6 @@ export default function WastePage() {
     reason: "SPOILAGE",
     branchId: "",
     photo: "",
-    date: "",
   })
 
   useEffect(() => {
@@ -101,14 +108,6 @@ export default function WastePage() {
       fetchReviews()
     }
   }, [user])
-
-  // Set today's date as default when form opens
-  useEffect(() => {
-    if (showForm && !editingLog) {
-      const today = new Date().toISOString().split('T')[0]
-      setFormData(prev => ({ ...prev, date: today }))
-    }
-  }, [showForm, editingLog])
 
   const fetchWasteLogs = async () => {
     setLoading(true)
@@ -325,7 +324,6 @@ export default function WastePage() {
   }
 
   const resetForm = () => {
-    const today = new Date().toISOString().split('T')[0]
     setFormData({
       itemName: "",
       quantity: "",
@@ -334,13 +332,11 @@ export default function WastePage() {
       reason: "SPOILAGE",
       branchId: "",
       photo: "",
-      date: today,
     })
   }
 
   const openEditForm = (wasteLog: WasteLogWithBranch) => {
     setEditingLog(wasteLog)
-    const logDate = new Date(wasteLog.createdAt).toISOString().split('T')[0]
     setFormData({
       itemName: wasteLog.itemName,
       quantity: wasteLog.quantity.toString(),
@@ -349,7 +345,6 @@ export default function WastePage() {
       reason: wasteLog.reason,
       branchId: wasteLog.branchId,
       photo: wasteLog.photo || "",
-      date: logDate,
     })
     setShowForm(true)
   }
@@ -388,22 +383,22 @@ export default function WastePage() {
     switch (status) {
       case "PENDING":
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-            <Clock className="w-3 h-3 mr-1" />
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+            <Clock className="w-3 h-3" />
             Pending
           </span>
         )
       case "APPROVED":
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-            <CheckCircle className="w-3 h-3 mr-1" />
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <CheckCircle className="w-3 h-3" />
             Approved
           </span>
         )
       case "REJECTED":
         return (
-          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-            <XCircle className="w-3 h-3 mr-1" />
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200">
+            <XCircle className="w-3 h-3" />
             Rejected
           </span>
         )
@@ -433,739 +428,1030 @@ export default function WastePage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-kitchzero-primary"></div>
-        <p className="ml-4 text-kitchzero-text">Loading waste management data...</p>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
+        <div className="flex items-center justify-center h-96">
+          <div className="flex flex-col items-center space-y-4">
+            <div className="relative">
+              <div className="w-16 h-16 border-4 border-kitchzero-primary/20 rounded-full animate-spin border-t-kitchzero-primary"></div>
+              <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-r-kitchzero-secondary rounded-full animate-spin animate-reverse"></div>
+            </div>
+            <div className="text-center">
+              <h3 className="text-lg font-semibold text-slate-900">Loading Waste Management</h3>
+              <p className="text-sm text-slate-500 mt-1">Fetching your data...</p>
+            </div>
+          </div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
-      {/* Header Section */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-kitchzero-text">Waste Management</h1>
-          <p className="text-kitchzero-text/70 mt-2">Track, analyze, and reduce food waste across your operations</p>
-        </div>
-        <div className="mt-4 lg:mt-0 flex items-center space-x-4">
-          <button
-            onClick={() => {
-              fetchWasteLogs()
-              if (user?.role === "SUPER_ADMIN") {
-                fetchBranches()
-                fetchReviews()
-              }
-            }}
-            disabled={loading}
-            className={`flex items-center space-x-2 px-4 py-2 border border-kitchzero-border rounded-lg transition-colors ${
-              loading 
-                ? 'opacity-50 cursor-not-allowed' 
-                : 'hover:bg-gray-50'
-            }`}
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
-          </button>
-
-          {user?.role === "SUPER_ADMIN" && reviews.length > 0 && (
-            <button onClick={() => setShowReviews(true)} className="btn-secondary flex items-center space-x-2 relative">
-              <Bell className="w-4 h-4" />
-              <span>Reviews</span>
-              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
-                {reviews.length}
-              </span>
-            </button>
-          )}
-
-          <button onClick={() => setShowForm(true)} className="btn-primary flex items-center space-x-2">
-            <Plus className="w-4 h-4" />
-            <span>Log Waste</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Enhanced Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <div className="card group hover:shadow-lg transition-all duration-200 border-l-4 border-l-kitchzero-primary">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-kitchzero-text/70">Total Entries</p>
-              <p className="text-2xl font-bold text-kitchzero-text">{wasteLogs.length}</p>
-              <p className="text-xs text-kitchzero-text/50 mt-1">All time records</p>
-            </div>
-            <div className="p-3 bg-gradient-to-br from-kitchzero-primary/10 to-kitchzero-primary/20 rounded-xl group-hover:scale-110 transition-transform">
-              <FileText className="w-6 h-6 text-kitchzero-primary" />
-            </div>
-          </div>
-        </div>
-
-        <div className="card group hover:shadow-lg transition-all duration-200 border-l-4 border-l-kitchzero-accent">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-kitchzero-text/70">Total Waste</p>
-              <p className="text-2xl font-bold text-kitchzero-text">
-                {wasteLogs.reduce((sum, log) => sum + log.quantity, 0).toFixed(1)} kg
-              </p>
-              <p className="text-xs text-kitchzero-text/50 mt-1">Weight accumulated</p>
-            </div>
-            <div className="p-3 bg-gradient-to-br from-kitchzero-accent/10 to-kitchzero-accent/20 rounded-xl group-hover:scale-110 transition-transform">
-              <Trash2 className="w-6 h-6 text-kitchzero-accent" />
-            </div>
-          </div>
-        </div>
-
-        <div className="card group hover:shadow-lg transition-all duration-200 border-l-4 border-l-red-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-kitchzero-text/70">Total Value</p>
-              <p className="text-2xl font-bold text-kitchzero-text">
-                {wasteLogs
-                  .reduce((sum, log) => sum + log.value, 0)
-                  .toLocaleString("en-LK", {
-                    style: "currency",
-                    currency: "LKR",
-                    minimumFractionDigits: 0,
-                  })}
-              </p>
-              <p className="text-xs text-kitchzero-text/50 mt-1">Financial impact</p>
-            </div>
-            <div className="p-3 bg-gradient-to-br from-red-100 to-red-200 rounded-xl group-hover:scale-110 transition-transform">
-              <DollarSign className="w-6 h-6 text-red-600" />
-            </div>
-          </div>
-        </div>
-
-        <div className="card group hover:shadow-lg transition-all duration-200 border-l-4 border-l-kitchzero-success">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-kitchzero-text/70">Avg per Entry</p>
-              <p className="text-2xl font-bold text-kitchzero-text">
-                {wasteLogs.length > 0
-                  ? (wasteLogs// Continue from previous code...
-
-                  .reduce((sum, log) => sum + log.value, 0) / wasteLogs.length).toLocaleString("en-LK", {
-                      style: "currency",
-                      currency: "LKR",
-                      minimumFractionDigits: 0,
-                    })
-                  : "LKR 0"}
-              </p>
-              <p className="text-xs text-kitchzero-text/50 mt-1">Per waste entry</p>
-            </div>
-            <div className="p-3 bg-gradient-to-br from-kitchzero-success/10 to-kitchzero-success/20 rounded-xl group-hover:scale-110 transition-transform">
-              <BarChart3 className="w-6 h-6 text-kitchzero-success" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Enhanced Filters and Search */}
-      <div className="card">
-        <div className="flex flex-col space-y-4">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-            <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <input
-                  type="text"
-                  placeholder="Search items..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 input w-full sm:w-64"
-                />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* Enhanced Header Section */}
+        <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200/60 shadow-sm">
+          <div className="absolute inset-0 bg-gradient-to-r from-kitchzero-primary/5 via-transparent to-kitchzero-secondary/5"></div>
+          <div className="relative px-8 py-6">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-kitchzero-primary to-kitchzero-secondary rounded-xl flex items-center justify-center shadow-lg">
+                  <Trash2 className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-2xl lg:text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
+                    Waste Management
+                  </h1>
+                  <p className="text-slate-600 mt-1 text-sm lg:text-base">
+                    Track, analyze, and reduce food waste across your operations
+                  </p>
+                </div>
               </div>
-
-              <button
-                onClick={() => setShowFilters(!showFilters)}
-                className={`flex items-center space-x-2 px-4 py-2 border rounded-lg transition-colors ${
-                  showFilters
-                    ? "bg-kitchzero-primary text-white border-kitchzero-primary"
-                    : "border-kitchzero-border hover:bg-gray-50"
-                }`}
-              >
-                <Filter className="w-4 h-4" />
-                <span>Filters</span>
-                {(filterReason || filterBranch) && (
-                  <span className="bg-red-500 text-white text-xs rounded-full w-2 h-2"></span>
-                )}
-              </button>
-            </div>
-
-            <div className="flex items-center space-x-4">
-              <select
-                value={`${sortBy}-${sortOrder}`}
-                onChange={(e) => {
-                  const [field, order] = e.target.value.split("-")
-                  setSortBy(field)
-                  setSortOrder(order as "asc" | "desc")
-                }}
-                className="select"
-              >
-                <option value="createdAt-desc">Newest First</option>
-                <option value="createdAt-asc">Oldest First</option>
-                <option value="value-desc">Highest Value</option>
-                <option value="value-asc">Lowest Value</option>
-                <option value="quantity-desc">Most Quantity</option>
-                <option value="quantity-asc">Least Quantity</option>
-              </select>
-
-              <button className="btn-secondary flex items-center space-x-2">
-                <Download className="w-4 h-4" />
-                <span>Export</span>
-              </button>
-            </div>
-          </div>
-
-          {showFilters && (
-            <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4 p-4 bg-gray-50 rounded-lg border">
-              <select value={filterReason} onChange={(e) => setFilterReason(e.target.value)} className="select">
-                <option value="">All Reasons</option>
-                <option value="SPOILAGE">Spoilage</option>
-                <option value="OVERPRODUCTION">Overproduction</option>
-                <option value="PLATE_WASTE">Plate Waste</option>
-                <option value="BUFFET_LEFTOVER">Buffet Leftover</option>
-              </select>
-
-              {user?.role === "SUPER_ADMIN" && (
-                <select value={filterBranch} onChange={(e) => setFilterBranch(e.target.value)} className="select">
-                  <option value="">All Branches</option>
-                  {branches.map((branch) => (
-                    <option key={branch.id} value={branch.id}>
-                      {branch.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-
-              {(filterReason || filterBranch) && (
+              
+              <div className="mt-6 lg:mt-0 flex items-center space-x-3">
                 <button
                   onClick={() => {
-                    setFilterReason("")
-                    setFilterBranch("")
+                    fetchWasteLogs()
+                    if (user?.role === "SUPER_ADMIN") {
+                      fetchBranches()
+                      fetchReviews()
+                    }
                   }}
-                  className="flex items-center space-x-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                  disabled={loading}
+                  className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 font-medium text-sm shadow-sm ${
+                    loading ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-md'
+                  }`}
                 >
-                  <X className="w-4 h-4" />
-                  <span>Clear Filters</span>
+                  <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                  {loading ? 'Refreshing...' : 'Refresh'}
                 </button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
 
-      {/* Enhanced Waste Logs Table */}
-      <div className="card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
-              <tr>
-                <th className="text-left py-4 px-6 font-semibold text-kitchzero-text">Item</th>
-                <th className="text-left py-4 px-6 font-semibold text-kitchzero-text">
-                  <button
-                    onClick={() => {
-                      setSortBy("quantity")
-                      setSortOrder(sortBy === "quantity" && sortOrder === "desc" ? "asc" : "desc")
-                    }}
-                    className="flex items-center space-x-1 hover:text-kitchzero-primary"
+                {user?.role === "SUPER_ADMIN" && reviews.length > 0 && (
+                  <button 
+                    onClick={() => setShowReviews(true)} 
+                    className="relative inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition-all duration-200 font-medium text-sm shadow-sm hover:shadow-md"
                   >
-                    <span>Quantity</span>
-                    {sortBy === "quantity" &&
-                      (sortOrder === "desc" ? <SortDesc className="w-4 h-4" /> : <SortAsc className="w-4 h-4" />)}
+                    <Bell className="w-4 h-4" />
+                    Reviews
+                    <span className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-bold animate-pulse shadow-lg">
+                      {reviews.length}
+                    </span>
                   </button>
-                </th>
-                <th className="text-left py-4 px-6 font-semibold text-kitchzero-text">
-                  <button
-                    onClick={() => {
-                      setSortBy("value")
-                      setSortOrder(sortBy === "value" && sortOrder === "desc" ? "asc" : "desc")
-                    }}
-                    className="flex items-center space-x-1 hover:text-kitchzero-primary"
-                  >
-                    <span>Value</span>
-                    {sortBy === "value" &&
-                      (sortOrder === "desc" ? <SortDesc className="w-4 h-4" /> : <SortAsc className="w-4 h-4" />)}
-                  </button>
-                </th>
-                <th className="text-left py-4 px-6 font-semibold text-kitchzero-text">Reason</th>
-                {user?.role === "SUPER_ADMIN" && (
-                  <th className="text-left py-4 px-6 font-semibold text-kitchzero-text">Branch</th>
                 )}
-                <th className="text-left py-4 px-6 font-semibold text-kitchzero-text">
-                  <button
-                    onClick={() => {
-                      setSortBy("createdAt")
-                      setSortOrder(sortBy === "createdAt" && sortOrder === "desc" ? "asc" : "desc")
-                    }}
-                    className="flex items-center space-x-1 hover:text-kitchzero-primary"
-                  >
-                    <span>Date</span>
-                    {sortBy === "createdAt" &&
-                      (sortOrder === "desc" ? <SortDesc className="w-4 h-4" /> : <SortAsc className="w-4 h-4" />)}
-                  </button>
-                </th>
-                <th className="text-right py-4 px-6 font-semibold text-kitchzero-text">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {filteredWasteLogs.map((log, index) => (
-                <tr
-                  key={log.id}
-                  className={`hover:bg-gray-50 transition-colors ${index % 2 === 0 ? "bg-white" : "bg-gray-25"}`}
+
+                <button 
+                  onClick={() => setShowForm(true)} 
+                  className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-kitchzero-primary to-kitchzero-secondary text-white hover:from-kitchzero-primary/90 hover:to-kitchzero-secondary/90 transition-all duration-200 font-semibold text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                 >
-                  <td className="py-4 px-6">
-                    <div className="flex items-center space-x-3">
-                      {log.photo && (
-                        <div className="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center">
-                          <Camera className="w-5 h-5 text-gray-500" />
-                        </div>
-                      )}
-                      <div>
-                        <p className="font-medium text-kitchzero-text">{log.itemName}</p>
-                        <p className="text-sm text-kitchzero-text/70">{log.unit}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6">
-                    <span className="font-medium text-kitchzero-text">{log.quantity}</span>
-                  </td>
-                  <td className="py-4 px-6">
-                    <span className="font-semibold text-kitchzero-text">
-                      {log.value.toLocaleString("en-LK", {
+                  <Plus className="w-4 h-4" />
+                  Log Waste
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Enhanced Modern Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Total Entries Card */}
+          <div className="group relative overflow-hidden bg-white rounded-2xl border border-slate-200/60 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-50/50 to-indigo-50/30"></div>
+            <div className="relative p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                  <FileText className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-slate-900">{wasteLogs.length}</div>
+                  <div className="text-xs text-slate-500 font-medium">ENTRIES</div>
+                </div>
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-700 mb-1">Total Entries</h3>
+                <p className="text-sm text-slate-500">All time records tracked</p>
+              </div>
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-indigo-600 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+            </div>
+          </div>
+
+          {/* Total Waste Card */}
+          <div className="group relative overflow-hidden bg-white rounded-2xl border border-slate-200/60 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+            <div className="absolute inset-0 bg-gradient-to-br from-orange-50/50 to-red-50/30"></div>
+            <div className="relative p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                  <Activity className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-slate-900">
+                    {wasteLogs.reduce((sum, log) => sum + log.quantity, 0).toFixed(1)}
+                  </div>
+                  <div className="text-xs text-slate-500 font-medium">KG</div>
+                </div>
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-700 mb-1">Total Waste</h3>
+                <p className="text-sm text-slate-500">Weight accumulated</p>
+              </div>
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-500 to-red-600 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+            </div>
+          </div>
+
+          {/* Total Value Card */}
+          <div className="group relative overflow-hidden bg-white rounded-2xl border border-slate-200/60 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+            <div className="absolute inset-0 bg-gradient-to-br from-red-50/50 to-pink-50/30"></div>
+            <div className="relative p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-pink-600 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                  <DollarSign className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-right">
+                  <div className="text-lg font-bold text-slate-900">
+                    {wasteLogs
+                      .reduce((sum, log) => sum + log.value, 0)
+                      .toLocaleString("en-LK", {
                         style: "currency",
                         currency: "LKR",
                         minimumFractionDigits: 0,
+                        maximumFractionDigits: 0,
                       })}
-                    </span>
-                  </td>
-                  <td className="py-4 px-6">
-                    <div className="flex items-center space-x-2">
-                      {getReasonIcon(log.reason)}
-                      <span className="text-sm font-medium">{formatReason(log.reason)}</span>
-                    </div>
-                  </td>
-                  {user?.role === "SUPER_ADMIN" && (
-                    <td className="py-4 px-6">
-                      <div className="flex items-center space-x-2">
-                        <MapPin className="w-4 h-4 text-gray-400" />
-                        <span className="text-sm text-kitchzero-text/70">{log.branch.name}</span>
-                      </div>
-                    </td>
-                  )}
-                  <td className="py-4 px-6">
-                    <div className="flex items-center space-x-2">
-                      <Calendar className="w-4 h-4 text-gray-400" />
-                      <span className="text-sm text-kitchzero-text/70">
-                        {new Date(log.createdAt).toLocaleDateString()}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="py-4 px-6">
-                    <div className="flex items-center justify-end space-x-2">
-                      <button
-                        onClick={() => setViewingLog(log)}
-                        className="p-2 text-kitchzero-primary hover:bg-kitchzero-primary/10 rounded-lg transition-colors"
-                        title="View Details"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => openEditForm(log)}
-                        className="p-2 text-kitchzero-secondary hover:bg-kitchzero-secondary/10 rounded-lg transition-colors"
-                        title="Edit"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => openDeleteModal(log)}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                  <div className="text-xs text-slate-500 font-medium">VALUE</div>
+                </div>
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-700 mb-1">Financial Impact</h3>
+                <p className="text-sm text-slate-500">Total value lost</p>
+              </div>
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-red-500 to-pink-600 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+            </div>
+          </div>
+
+          {/* Average per Entry Card */}
+          <div className="group relative overflow-hidden bg-white rounded-2xl border border-slate-200/60 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/50 to-teal-50/30"></div>
+            <div className="relative p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                  <Target className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-right">
+                  <div className="text-lg font-bold text-slate-900">
+                    {wasteLogs.length > 0
+                      ? (wasteLogs.reduce((sum, log) => sum + log.value, 0) / wasteLogs.length).toLocaleString("en-LK", {
+                          style: "currency",
+                          currency: "LKR",
+                          minimumFractionDigits: 0,
+                          maximumFractionDigits: 0,
+                        })
+                      : "LKR 0"}
+                  </div>
+                  <div className="text-xs text-slate-500 font-medium">AVG</div>
+                </div>
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-700 mb-1">Average Value</h3>
+                <p className="text-sm text-slate-500">Per waste entry</p>
+              </div>
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 to-teal-600 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
+            </div>
+          </div>
         </div>
 
-        {filteredWasteLogs.length === 0 && (
-          <div className="text-center py-12">
-            <Trash2 className="w-16 h-16 text-kitchzero-text/30 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-kitchzero-text mb-2">No waste logs found</h3>
-            <p className="text-kitchzero-text/70 mb-6">
-              {searchTerm || filterReason || filterBranch
-                ? "Try adjusting your filters"
-                : "Start by logging your first waste entry"}
-            </p>
-            {!searchTerm && !filterReason && !filterBranch && (
-              <button onClick={() => setShowForm(true)} className="btn-primary">
-                Log Your First Waste Entry
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+        {/* Enhanced Search and Filters */}
+        <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
+          <div className="p-6">
+            <div className="flex flex-col space-y-4">
+              {/* Main Search and Filter Bar */}
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0 lg:space-x-4">
+                <div className="flex flex-col sm:flex-row sm:items-center space-y-3 sm:space-y-0 sm:space-x-3">
+                  {/* Enhanced Search Input */}
+                  <div className="relative group">
+                    <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4 group-focus-within:text-kitchzero-primary transition-colors" />
+                    <input
+                      type="text"
+                      placeholder="Search waste items..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full sm:w-80 pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200 text-sm"
+                    />
+                  </div>
 
-      {/* Delete Confirmation Modal */}
-      <DeleteConfirmationModal
-        isOpen={deleteModal.isOpen}
-        onClose={() => setDeleteModal({ isOpen: false, wasteLog: null, isLoading: false })}
-        onConfirm={handleDelete}
-        title="Delete Waste Entry"
-        description="Are you sure you want to delete this waste entry? This action cannot be undone."
-        itemName={deleteModal.wasteLog?.itemName}
-        requireReason={user?.role === "BRANCH_ADMIN"}
-        isLoading={deleteModal.isLoading}
-      />
-
-      {/* Add/Edit Form Modal */}
-      {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
-              <h2 className="text-2xl font-bold text-kitchzero-text">
-                {editingLog ? "Edit Waste Entry" : "Log New Waste Entry"}
-              </h2>
-              <p className="text-kitchzero-text/70 mt-1">
-                {editingLog && user?.role === "BRANCH_ADMIN"
-                  ? "Changes will require super admin approval"
-                  : "Record food waste details for tracking and analysis"}
-              </p>
-            </div>
-
-            <form onSubmit={editingLog ? handleEdit : handleSubmit} className="p-6 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-semibold text-kitchzero-text mb-2">Item Name *</label>
-                  <input
-                    type="text"
-                    value={formData.itemName}
-                    onChange={(e) => setFormData({ ...formData, itemName: e.target.value })}
-                    className="input"
-                    placeholder="e.g., Rice, Chicken, Vegetables"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-kitchzero-text mb-2">Quantity *</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={formData.quantity}
-                    onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-                    className="input"
-                    placeholder="0.0"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-kitchzero-text mb-2">Unit *</label>
-                  <select
-                    value={formData.unit}
-                    onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                    className="select"
+                  {/* Filter Toggle Button */}
+                  <button
+                    onClick={() => setShowFilters(!showFilters)}
+                    className={`flex items-center gap-2 px-4 py-3 rounded-xl border transition-all duration-200 font-medium text-sm ${
+                      showFilters
+                        ? "bg-kitchzero-primary text-white border-kitchzero-primary shadow-lg"
+                        : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300"
+                    }`}
                   >
-                    <option value="kg">Kilograms (kg)</option>
-                    <option value="g">Grams (g)</option>
-                    <option value="pieces">Pieces</option>
-                    <option value="liters">Liters</option>
-                    <option value="portions">Portions</option>
-                  </select>
+                    <Filter className="w-4 h-4" />
+                    Filters
+                    <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showFilters ? 'rotate-180' : ''}`} />
+                    {(filterReason || filterBranch) && (
+                      <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                    )}
+                  </button>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-semibold text-kitchzero-text mb-2">Value (LKR) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.value}
-                    onChange={(e) => setFormData({ ...formData, value: e.target.value })}
-                    className="input"
-                    placeholder="0.00"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-kitchzero-text mb-2">Waste Reason *</label>
-                  <select
-                    value={formData.reason}
-                    onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                    className="select"
-                  >
-                    <option value="SPOILAGE">Spoilage</option>
-                    <option value="OVERPRODUCTION">Overproduction</option>
-                    <option value="PLATE_WASTE">Plate Waste</option>
-                    <option value="BUFFET_LEFTOVER">Buffet Leftover</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-kitchzero-text mb-2">Date *</label>
-                  <input
-                    type="date"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    className="input"
-                    required
-                  />
-                </div>
-
-                {user?.role === "SUPER_ADMIN" && (
-                  <div>
-                    <label className="block text-sm font-semibold text-kitchzero-text mb-2">Branch *</label>
+                {/* Sort and Export Controls */}
+                <div className="flex items-center space-x-3">
+                  <div className="relative">
                     <select
-                      value={formData.branchId}
-                      onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
-                      className="select"
-                      required
+                      value={`${sortBy}-${sortOrder}`}
+                      onChange={(e) => {
+                        const [field, order] = e.target.value.split("-")
+                        setSortBy(field)
+                        setSortOrder(order as "asc" | "desc")
+                      }}
+                      className="appearance-none bg-white border border-slate-200 rounded-xl px-4 py-3 pr-10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200"
                     >
-                      <option value="">Select Branch</option>
-                      {branches.map((branch) => (
-                        <option key={branch.id} value={branch.id}>
-                          {branch.name} - {branch.location}
-                        </option>
-                      ))}
+                      <option value="createdAt-desc">Newest First</option>
+                      <option value="createdAt-asc">Oldest First</option>
+                      <option value="value-desc">Highest Value</option>
+                      <option value="value-asc">Lowest Value</option>
+                      <option value="quantity-desc">Most Quantity</option>
+                      <option value="quantity-asc">Least Quantity</option>
                     </select>
+                    <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                   </div>
-                )}
-              </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-kitchzero-text mb-2">Photo URL (Optional)</label>
-                <input
-                  type="url"
-                  value={formData.photo}
-                  onChange={(e) => setFormData({ ...formData, photo: e.target.value })}
-                  className="input"
-                  placeholder="https://example.com/photo.jpg"
-                />
-                <p className="text-xs text-kitchzero-text/50 mt-1">Add a photo URL to document the waste</p>
-              </div>
+                  <button className="flex items-center gap-2 px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 font-medium text-sm shadow-sm hover:shadow-md">
+                   <Download className="w-4 h-4" />
+                   Export
+                 </button>
+               </div>
+             </div>
 
-              <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowForm(false)
-                    setEditingLog(null)
-                    resetForm()
-                  }}
-                  className="px-6 py-2 border border-kitchzero-border rounded-lg hover:bg-gray-50 transition-colors font-medium"
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="btn-primary px-8">
-                  {editingLog ? "Update Entry" : "Log Waste Entry"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+             {/* Advanced Filters Panel */}
+             {showFilters && (
+               <div className="bg-gradient-to-r from-slate-50 to-slate-50/50 rounded-xl border border-slate-200/60 p-5">
+                 <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
+                   <div className="flex-1">
+                     <label className="block text-sm font-medium text-slate-700 mb-2">Waste Reason</label>
+                     <select 
+                       value={filterReason} 
+                       onChange={(e) => setFilterReason(e.target.value)} 
+                       className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200"
+                     >
+                       <option value="">All Reasons</option>
+                       <option value="SPOILAGE">Spoilage</option>
+                       <option value="OVERPRODUCTION">Overproduction</option>
+                       <option value="PLATE_WASTE">Plate Waste</option>
+                       <option value="BUFFET_LEFTOVER">Buffet Leftover</option>
+                     </select>
+                   </div>
 
-      {/* View Details Modal */}
-      {viewingLog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg">
-            <div className="p-6 border-b border-gray-200">
-              <h2 className="text-2xl font-bold text-kitchzero-text">Waste Entry Details</h2>
-            </div>
+                   {user?.role === "SUPER_ADMIN" && (
+                     <div className="flex-1">
+                       <label className="block text-sm font-medium text-slate-700 mb-2">Branch Location</label>
+                       <select 
+                         value={filterBranch} 
+                         onChange={(e) => setFilterBranch(e.target.value)} 
+                         className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200"
+                       >
+                         <option value="">All Branches</option>
+                         {branches.map((branch) => (
+                           <option key={branch.id} value={branch.id}>
+                             {branch.name}
+                           </option>
+                         ))}
+                       </select>
+                     </div>
+                   )}
 
-            <div className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm font-medium text-kitchzero-text/70">Item Name</p>
-                  <p className="text-lg font-semibold text-kitchzero-text">{viewingLog.itemName}</p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-kitchzero-text/70">Quantity</p>
-                  <p className="text-lg font-semibold text-kitchzero-text">
-                    {viewingLog.quantity} {viewingLog.unit}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-kitchzero-text/70">Value</p>
-                  <p className="text-lg font-semibold text-kitchzero-text">
-                    {viewingLog.value.toLocaleString("en-LK", {
-                      style: "currency",
-                      currency: "LKR",
-                    })}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-kitchzero-text/70">Reason</p>
-                  <div className="flex items-center space-x-2">
-                    {getReasonIcon(viewingLog.reason)}
-                    <p className="text-lg font-semibold text-kitchzero-text">{formatReason(viewingLog.reason)}</p>
-                  </div>
-                </div>
-              </div>
+                   {(filterReason || filterBranch) && (
+                     <div className="flex-shrink-0">
+                       <label className="block text-sm font-medium text-transparent mb-2">Clear</label>
+                       <button
+                         onClick={() => {
+                           setFilterReason("")
+                           setFilterBranch("")
+                         }}
+                         className="flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 rounded-lg transition-all duration-200 font-medium"
+                       >
+                         <X className="w-4 h-4" />
+                         Clear Filters
+                       </button>
+                     </div>
+                   )}
+                 </div>
+               </div>
+             )}
+           </div>
+         </div>
+       </div>
 
-              {user?.role === "SUPER_ADMIN" && (
-                <div>
-                  <p className="text-sm font-medium text-kitchzero-text/70">Branch</p>
-                  <p className="text-lg font-semibold text-kitchzero-text">
-                    {viewingLog.branch.name} - {viewingLog.branch.location}
-                  </p>
-                </div>
-              )}
+       {/* Enhanced Data Table */}
+       <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
+         <div className="overflow-x-auto">
+           <table className="w-full">
+             <thead>
+               <tr className="bg-gradient-to-r from-slate-50 to-slate-100/50 border-b border-slate-200">
+                 <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm">
+                   Item Details
+                 </th>
+                 <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm">
+                   <button
+                     onClick={() => {
+                       setSortBy("quantity")
+                       setSortOrder(sortBy === "quantity" && sortOrder === "desc" ? "asc" : "desc")
+                     }}
+                     className="flex items-center gap-1.5 hover:text-kitchzero-primary transition-colors group"
+                   >
+                     Quantity
+                     {sortBy === "quantity" && (
+                       sortOrder === "desc" ? 
+                       <SortDesc className="w-4 h-4 text-kitchzero-primary" /> : 
+                       <SortAsc className="w-4 h-4 text-kitchzero-primary" />
+                     )}
+                     {sortBy !== "quantity" && (
+                       <div className="w-4 h-4 opacity-0 group-hover:opacity-50 transition-opacity">
+                         <SortDesc className="w-4 h-4" />
+                       </div>
+                     )}
+                   </button>
+                 </th>
+                 <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm">
+                   <button
+                     onClick={() => {
+                       setSortBy("value")
+                       setSortOrder(sortBy === "value" && sortOrder === "desc" ? "asc" : "desc")
+                     }}
+                     className="flex items-center gap-1.5 hover:text-kitchzero-primary transition-colors group"
+                   >
+                     Financial Impact
+                     {sortBy === "value" && (
+                       sortOrder === "desc" ? 
+                       <SortDesc className="w-4 h-4 text-kitchzero-primary" /> : 
+                       <SortAsc className="w-4 h-4 text-kitchzero-primary" />
+                     )}
+                     {sortBy !== "value" && (
+                       <div className="w-4 h-4 opacity-0 group-hover:opacity-50 transition-opacity">
+                         <SortDesc className="w-4 h-4" />
+                       </div>
+                     )}
+                   </button>
+                 </th>
+                 <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm">Waste Category</th>
+                 {user?.role === "SUPER_ADMIN" && (
+                   <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm">Location</th>
+                 )}
+                 <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm">
+                   <button
+                     onClick={() => {
+                       setSortBy("createdAt")
+                       setSortOrder(sortBy === "createdAt" && sortOrder === "desc" ? "asc" : "desc")
+                     }}
+                     className="flex items-center gap-1.5 hover:text-kitchzero-primary transition-colors group"
+                   >
+                     Date Logged
+                     {sortBy === "createdAt" && (
+                       sortOrder === "desc" ? 
+                       <SortDesc className="w-4 h-4 text-kitchzero-primary" /> : 
+                       <SortAsc className="w-4 h-4 text-kitchzero-primary" />
+                     )}
+                     {sortBy !== "createdAt" && (
+                       <div className="w-4 h-4 opacity-0 group-hover:opacity-50 transition-opacity">
+                         <SortDesc className="w-4 h-4" />
+                       </div>
+                     )}
+                   </button>
+                 </th>
+                 <th className="text-right py-4 px-6 font-semibold text-slate-700 text-sm">Actions</th>
+               </tr>
+             </thead>
+             <tbody className="divide-y divide-slate-100">
+               {filteredWasteLogs.map((log, index) => (
+                 <tr
+                   key={log.id}
+                   className="group hover:bg-gradient-to-r hover:from-slate-50/50 hover:to-transparent transition-all duration-200"
+                 >
+                   <td className="py-5 px-6">
+                     <div className="flex items-center gap-4">
+                       <div className="w-12 h-12 bg-gradient-to-br from-slate-100 to-slate-200 rounded-xl flex items-center justify-center group-hover:from-kitchzero-primary/10 group-hover:to-kitchzero-secondary/10 transition-all duration-200">
+                         {log.photo ? (
+                           <Camera className="w-5 h-5 text-slate-500 group-hover:text-kitchzero-primary transition-colors" />
+                         ) : (
+                           <FileText className="w-5 h-5 text-slate-500 group-hover:text-kitchzero-primary transition-colors" />
+                         )}
+                       </div>
+                       <div>
+                         <div className="font-semibold text-slate-900 text-sm">{log.itemName}</div>
+                         <div className="text-xs text-slate-500 font-medium mt-0.5">Unit: {log.unit}</div>
+                       </div>
+                     </div>
+                   </td>
+                   
+                   <td className="py-5 px-6">
+                     <div className="text-lg font-bold text-slate-900">{log.quantity}</div>
+                     <div className="text-xs text-slate-500 font-medium">{log.unit}</div>
+                   </td>
+                   
+                   <td className="py-5 px-6">
+                     <div className="text-lg font-bold text-red-600">
+                       {log.value.toLocaleString("en-LK", {
+                         style: "currency",
+                         currency: "LKR",
+                         minimumFractionDigits: 0,
+                       })}
+                     </div>
+                     <div className="text-xs text-slate-500 font-medium">Cost impact</div>
+                   </td>
+                   
+                   <td className="py-5 px-6">
+                     <div className="flex items-center gap-2">
+                       <div className="p-2 rounded-lg bg-slate-50 group-hover:bg-white transition-colors">
+                         {getReasonIcon(log.reason)}
+                       </div>
+                       <div>
+                         <div className="text-sm font-semibold text-slate-900">{formatReason(log.reason)}</div>
+                         <div className="text-xs text-slate-500">Waste type</div>
+                       </div>
+                     </div>
+                   </td>
+                   
+                   {user?.role === "SUPER_ADMIN" && (
+                     <td className="py-5 px-6">
+                       <div className="flex items-center gap-2">
+                         <div className="p-2 rounded-lg bg-slate-50 group-hover:bg-white transition-colors">
+                           <MapPin className="w-4 h-4 text-slate-400" />
+                         </div>
+                         <div>
+                           <div className="text-sm font-semibold text-slate-900">{log.branch.name}</div>
+                           <div className="text-xs text-slate-500">Branch location</div>
+                         </div>
+                       </div>
+                     </td>
+                   )}
+                   
+                   <td className="py-5 px-6">
+                     <div className="flex items-center gap-2">
+                       <div className="p-2 rounded-lg bg-slate-50 group-hover:bg-white transition-colors">
+                         <Calendar className="w-4 h-4 text-slate-400" />
+                       </div>
+                       <div>
+                         <div className="text-sm font-semibold text-slate-900">
+                           {new Date(log.createdAt).toLocaleDateString()}
+                         </div>
+                         <div className="text-xs text-slate-500">
+                           {new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                         </div>
+                       </div>
+                     </div>
+                   </td>
+                   
+                   <td className="py-5 px-6">
+                     <div className="flex items-center justify-end gap-1">
+                       <button
+                         onClick={() => setViewingLog(log)}
+                         className="p-2.5 text-slate-400 hover:text-kitchzero-primary hover:bg-kitchzero-primary/5 rounded-xl transition-all duration-200 group/btn"
+                         title="View Details"
+                       >
+                         <Eye className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                       </button>
+                       <button
+                         onClick={() => openEditForm(log)}
+                         className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all duration-200 group/btn"
+                         title="Edit Entry"
+                       >
+                         <Edit className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                       </button>
+                       <button
+                         onClick={() => openDeleteModal(log)}
+                         className="p-2.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 group/btn"
+                         title="Delete Entry"
+                       >
+                         <Trash2 className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                       </button>
+                     </div>
+                   </td>
+                 </tr>
+               ))}
+             </tbody>
+           </table>
+         </div>
 
-              <div>
-                <p className="text-sm font-medium text-kitchzero-text/70">Date & Time</p>
-                <p className="text-lg font-semibold text-kitchzero-text">
-                  {new Date(viewingLog.createdAt).toLocaleString()}
-                </p>
-              </div>
+         {/* Enhanced Empty State */}
+         {filteredWasteLogs.length === 0 && (
+           <div className="text-center py-16 px-6">
+             <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
+               <Trash2 className="w-10 h-10 text-slate-400" />
+             </div>
+             <h3 className="text-xl font-semibold text-slate-900 mb-3">No waste logs found</h3>
+             <p className="text-slate-500 mb-8 max-w-md mx-auto">
+               {searchTerm || filterReason || filterBranch
+                 ? "No entries match your current filters. Try adjusting your search criteria."
+                 : "Start tracking your food waste to gain insights and reduce costs across your operations."}
+             </p>
+             {!searchTerm && !filterReason && !filterBranch && (
+               <button 
+                 onClick={() => setShowForm(true)} 
+                 className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-kitchzero-primary to-kitchzero-secondary text-white rounded-xl hover:from-kitchzero-primary/90 hover:to-kitchzero-secondary/90 transition-all duration-200 font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+               >
+                 <Plus className="w-5 h-5" />
+                 Log Your First Waste Entry
+               </button>
+             )}
+           </div>
+         )}
+       </div>
+     </div>
 
-              {viewingLog.photo && (
-                <div>
-                  <p className="text-sm font-medium text-kitchzero-text/70 mb-2">Photo</p>
-                  <img
-                    src={viewingLog.photo || "/placeholder.svg"}
-                    alt="Waste photo"
-                    className="w-full h-48 object-cover rounded-lg"
-                  />
-                </div>
-              )}
-            </div>
+     {/* Delete Confirmation Modal */}
+     <DeleteConfirmationModal
+       isOpen={deleteModal.isOpen}
+       onClose={() => setDeleteModal({ isOpen: false, wasteLog: null, isLoading: false })}
+       onConfirm={handleDelete}
+       title="Delete Waste Entry"
+       description="Are you sure you want to delete this waste entry? This action cannot be undone."
+       itemName={deleteModal.wasteLog?.itemName}
+       requireReason={user?.role === "BRANCH_ADMIN"}
+       isLoading={deleteModal.isLoading}
+     />
 
-            <div className="p-6 border-t border-gray-200 flex justify-end">
-              <button onClick={() => setViewingLog(null)} className="btn-primary">
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+     {/* Enhanced Add/Edit Form Modal */}
+     {showForm && (
+       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden">
+           {/* Modal Header */}
+           <div className="relative bg-gradient-to-r from-kitchzero-primary to-kitchzero-secondary p-6 text-white">
+             <button
+               onClick={() => {
+                 setShowForm(false)
+                 setEditingLog(null)
+                 resetForm()
+               }}
+               className="absolute top-4 right-4 p-2 hover:bg-white/20 rounded-xl transition-colors"
+             >
+               <X className="w-5 h-5" />
+             </button>
+             <div className="flex items-center gap-3">
+               <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                 {editingLog ? <Edit className="w-6 h-6" /> : <Plus className="w-6 h-6" />}
+               </div>
+               <div>
+                 <h2 className="text-2xl font-bold">
+                   {editingLog ? "Edit Waste Entry" : "Log New Waste Entry"}
+                 </h2>
+                 <p className="text-white/80 text-sm mt-1">
+                   {editingLog && user?.role === "BRANCH_ADMIN"
+                     ? "Changes will require super admin approval"
+                     : "Record food waste details for tracking and analysis"}
+                 </p>
+               </div>
+             </div>
+           </div>
 
-      {/* Enhanced Reviews Modal */}
-      {showReviews && user?.role === "SUPER_ADMIN" && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold text-kitchzero-text">Pending Reviews</h2>
-                  <p className="text-kitchzero-text/70 mt-1">
-                    Review and approve changes requested by branch administrators
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowReviews(false)}
-                  className="text-gray-500 hover:text-gray-700 transition-colors"
-                >
-                  <X className="w-6 h-6" />
-                </button>
-              </div>
-            </div>
+           {/* Modal Content */}
+           <div className="max-h-[calc(90vh-200px)] overflow-y-auto">
+             <form onSubmit={editingLog ? handleEdit : handleSubmit} className="p-6 space-y-6">
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                 <div className="md:col-span-2">
+                   <label className="block text-sm font-semibold text-slate-700 mb-3">
+                     Item Name *
+                   </label>
+                   <input
+                     type="text"
+                     value={formData.itemName}
+                     onChange={(e) => setFormData({ ...formData, itemName: e.target.value })}
+                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200 text-sm"
+                     placeholder="e.g., Rice, Chicken, Vegetables"
+                     required
+                   />
+                 </div>
 
-            <div className="p-6">
-              {reviews.length > 0 ? (
-                <div className="space-y-4">
-                  {reviews.map((review) => (
-                    <div
-                      key={review.id}
-                      className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-3 mb-3">
-                            <span
-                              className={`px-3 py-1 rounded-full text-sm font-medium border ${
-                                review.action === "CREATE"
-                                  ? "text-green-600 bg-green-50 border-green-200"
-                                  : review.action === "UPDATE"
-                                    ? "text-blue-600 bg-blue-50 border-blue-200"
-                                    : "text-red-600 bg-red-50 border-red-200"
-                              }`}
-                            >
-                              {review.action} Request
-                            </span>
-                            {getStatusBadge(review.status)}
-                          </div>
+                 <div>
+                   <label className="block text-sm font-semibold text-slate-700 mb-3">
+                     Quantity *
+                   </label>
+                   <input
+                     type="number"
+                     step="0.1"
+                     value={formData.quantity}
+                     onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200 text-sm"
+                     placeholder="0.0"
+                     required
+                   />
+                 </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                            <div className="flex items-center space-x-2 text-sm text-kitchzero-text/70">
-                              <User className="w-4 h-4" />
-                              <span className="font-medium">{review.creator.username}</span>
-                              <span className="text-kitchzero-text/50">({review.creator.role})</span>
-                            </div>
-                            <div className="flex items-center space-x-2 text-sm text-kitchzero-text/70">
-                              <Calendar className="w-4 h-4" />
-                              <span>{new Date(review.createdAt).toLocaleDateString()}</span>
-                            </div>
-                          </div>
+                 <div>
+                   <label className="block text-sm font-semibold text-slate-700 mb-3">
+                     Unit *
+                   </label>
+                   <div className="relative">
+                     <select
+                       value={formData.unit}
+                       onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
+                       className="w-full appearance-none px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200 text-sm"
+                     >
+                       <option value="kg">Kilograms (kg)</option>
+                       <option value="g">Grams (g)</option>
+                       <option value="pieces">Pieces</option>
+                       <option value="liters">Liters</option>
+                       <option value="portions">Portions</option>
+                     </select>
+                     <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                   </div>
+                 </div>
 
-                          {review.wasteLog && (
-                            <div className="bg-gray-50 p-3 rounded-lg mb-3">
-                              <p className="text-sm font-medium text-kitchzero-text">
-                                Item: <span className="font-semibold">{review.wasteLog.itemName}</span>
-                              </p>
-                              <p className="text-sm text-kitchzero-text/70">Branch: {review.wasteLog.branch.name}</p>
-                            </div>
-                          )}
+                 <div>
+                   <label className="block text-sm font-semibold text-slate-700 mb-3">
+                     Value (LKR) *
+                   </label>
+                   <div className="relative">
+                     <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                     <input
+                       type="number"
+                       step="0.01"
+                       value={formData.value}
+                       onChange={(e) => setFormData({ ...formData, value: e.target.value })}
+                       className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200 text-sm"
+                       placeholder="0.00"
+                       required
+                     />
+                   </div>
+                 </div>
 
-                          {review.reason && (
-                            <div className="bg-blue-50 border-l-4 border-blue-400 p-3 mb-3">
-                              <p className="text-sm font-medium text-blue-800">Reason:</p>
-                              <p className="text-sm text-blue-700 italic">"{review.reason}"</p>
-                            </div>
-                          )}
-                        </div>
+                 <div>
+                   <label className="block text-sm font-semibold text-slate-700 mb-3">
+                     Waste Reason *
+                   </label>
+                   <div className="relative">
+                     <select
+                       value={formData.reason}
+                       onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
+                       className="w-full appearance-none px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200 text-sm"
+                     >
+                       <option value="SPOILAGE">Spoilage</option>
+                       <option value="OVERPRODUCTION">Overproduction</option>
+                       <option value="PLATE_WASTE">Plate Waste</option>
+                       <option value="BUFFET_LEFTOVER">Buffet Leftover</option>
+                     </select>
+                     <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                   </div>
+                 </div>
 
-                        {review.status === "PENDING" && (
-                          <div className="flex space-x-3 ml-4">
-                            <button
-                              onClick={() => handleReviewAction(review.id, "approve")}
-                              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2"
-                            >
-                              <CheckCircle className="w-4 h-4" />
-                              <span>Approve</span>
-                            </button>
-                            <button
-                              onClick={() => handleReviewAction(review.id, "reject")}
-                              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2"
-                            >
-                              <XCircle className="w-4 h-4" />
-                              <span>Reject</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-12">
-                  <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-kitchzero-text mb-2">All caught up!</h3>
-                  <p className="text-kitchzero-text/70">No pending reviews at this time.</p>
-                </div>
-              )}
-            </div>
+                 {user?.role === "SUPER_ADMIN" && (
+                   <div>
+                     <label className="block text-sm font-semibold text-slate-700 mb-3">
+                       Branch *
+                     </label>
+                     <div className="relative">
+                       <select
+                         value={formData.branchId}
+                         onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
+                         className="w-full appearance-none px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200 text-sm"
+                         required
+                       >
+                         <option value="">Select Branch</option>
+                         {branches.map((branch) => (
+                           <option key={branch.id} value={branch.id}>
+                             {branch.name} - {branch.location}
+                           </option>
+                         ))}
+                       </select>
+                       <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                     </div>
+                   </div>
+                 )}
 
-            <div className="p-6 border-t border-gray-200 bg-gray-50 rounded-b-xl">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-kitchzero-text/70">
-                  {reviews.length} pending review{reviews.length !== 1 ? "s" : ""}
-                </p>
-                <button onClick={() => setShowReviews(false)} className="btn-primary">
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
+                 <div className="md:col-span-2">
+                   <label className="block text-sm font-semibold text-slate-700 mb-3">
+                     Photo URL (Optional)
+                   </label>
+                   <div className="relative">
+                     <Camera className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                     <input
+                       type="url"
+                       value={formData.photo}
+                       onChange={(e) => setFormData({ ...formData, photo: e.target.value })}
+                       className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200 text-sm"
+                       placeholder="https://example.com/photo.jpg"
+                     />
+                   </div>
+                   <p className="text-xs text-slate-500 mt-2 flex items-center gap-1">
+                     <Info className="w-3 h-3" />
+                     Add a photo URL to document the waste for better tracking
+                   </p>
+                 </div>
+               </div>
+
+               {/* Form Actions */}
+               <div className="flex justify-end gap-3 pt-6 border-t border-slate-200">
+                 <button
+                   type="button"
+                   onClick={() => {
+                     setShowForm(false)
+                     setEditingLog(null)
+                     resetForm()
+                   }}
+                   className="px-6 py-3 border border-slate-200 rounded-xl text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 font-medium text-sm"
+                 >
+                   Cancel
+                 </button>
+                 <button 
+                   type="submit" 
+                   className="px-8 py-3 bg-gradient-to-r from-kitchzero-primary to-kitchzero-secondary text-white rounded-xl hover:from-kitchzero-primary/90 hover:to-kitchzero-secondary/90 transition-all duration-200 font-semibold text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                 >
+                   {editingLog ? "Update Entry" : "Log Waste Entry"}
+                 </button>
+               </div>
+             </form>
+           </div>
+         </div>
+       </div>
+     )}
+
+     {/* Enhanced View Details Modal */}
+     {viewingLog && (
+       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+           {/* Modal Header */}
+           <div className="relative bg-gradient-to-r from-slate-800 to-slate-900 p-6 text-white">
+             <button
+               onClick={() => setViewingLog(null)}
+               className="absolute top-4 right-4 p-2 hover:bg-white/20 rounded-xl transition-colors"
+             >
+               <X className="w-5 h-5" />
+             </button>
+             <div className="flex items-center gap-3">
+               <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                 <Eye className="w-6 h-6" />
+               </div>
+               <div>
+                 <h2 className="text-2xl font-bold">Waste Entry Details</h2>
+                 <p className="text-white/80 text-sm mt-1">Complete entry information</p>
+               </div>
+             </div>
+           </div>
+
+           {/* Modal Content */}
+           <div className="p-6 space-y-6">
+             <div className="grid grid-cols-2 gap-6">
+               <div className="space-y-2">
+                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Item Name</label>
+                 <p className="text-lg font-bold text-slate-900">{viewingLog.itemName}</p>
+               </div>
+               <div className="space-y-2">
+                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Quantity</label>
+                 <p className="text-lg font-bold text-slate-900">
+                   {viewingLog.quantity} {viewingLog.unit}
+                 </p>
+               </div>
+               <div className="space-y-2">
+                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Financial Value</label>
+                 <p className="text-lg font-bold text-red-600">
+                   {viewingLog.value.toLocaleString("en-LK", {
+                     style: "currency",
+                     currency: "LKR",
+                   })}
+                 </p>
+               </div>
+               <div className="space-y-2">
+                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Waste Reason</label>
+                 <div className="flex items-center gap-2">
+                   {getReasonIcon(viewingLog.reason)}
+                   <p className="text-lg font-bold text-slate-900">{formatReason(viewingLog.reason)}</p>
+                 </div>
+               </div>
+             </div>
+
+             {user?.role === "SUPER_ADMIN" && (
+               <div className="space-y-2 pt-4 border-t border-slate-200">
+                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Branch Location</label>
+                 <div className="flex items-center gap-2">
+                   <MapPin className="w-4 h-4 text-slate-400" />
+                   <p className="text-lg font-bold text-slate-900">
+                     {viewingLog.branch.name} - {viewingLog.branch.location}
+                   </p>
+                 </div>
+               </div>
+             )}
+
+             <div className="space-y-2 pt-4 border-t border-slate-200">
+               <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Date & Time Logged</label>
+               <div className="flex items-center gap-2">
+                 <Calendar className="w-4 h-4 text-slate-400" />
+                 <p className="text-lg font-bold text-slate-900">
+                   {new Date(viewingLog.createdAt).toLocaleDateString()} at{" "}
+                   {new Date(viewingLog.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                 </p>
+               </div>
+             </div>
+
+             {viewingLog.photo && (
+               <div className="space-y-3 pt-4 border-t border-slate-200">
+                 <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Documentation Photo</label>
+                 <div className="relative group">
+                   <img
+                     src={viewingLog.photo || "/placeholder.svg"}
+                     alt="Waste documentation"
+                     className="w-full h-48 object-cover rounded-xl border border-slate-200 group-hover:shadow-lg transition-all duration-200"
+                   />
+                   <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 rounded-xl transition-all duration-200 flex items-center justify-center">
+                     <ExternalLink className="w-6 h-6 text-white opacity-0 group-hover:opacity-100 transition-opacity" />
+                   </div>
+                 </div>
+               </div>
+             )}
+           </div>
+
+           {/* Modal Footer */}
+           <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end">
+             <button 
+               onClick={() => setViewingLog(null)} 
+               className="px-6 py-3 bg-gradient-to-r from-kitchzero-primary to-kitchzero-secondary text-white rounded-xl hover:from-kitchzero-primary/90 hover:to-kitchzero-secondary/90 transition-all duration-200 font-semibold text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+             >
+               Close Details
+             </button>
+           </div>
+         </div>
+       </div>
+     )}
+
+     {/* Enhanced Reviews Modal */}
+     {showReviews && user?.role === "SUPER_ADMIN" && (
+       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+         <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] overflow-hidden">
+           {/* Modal Header */}
+           <div className="relative bg-gradient-to-r from-amber-500 to-orange-600 p-6 text-white">
+             <button
+               onClick={() => setShowReviews(false)}
+               className="absolute top-4 right-4 p-2 hover:bg-white/20 rounded-xl transition-colors"
+             >
+               <X className="w-5 h-5" />
+             </button>
+             <div className="flex items-center gap-3">
+               <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                 <Bell className="w-6 h-6" />
+               </div>
+               <div>
+                 <h2 className="text-2xl font-bold">Pending Reviews</h2>
+                 <p className="text-white/80 text-sm mt-1">
+                   Review and approve changes requested by branch administrators
+                 </p>
+               </div>
+             </div>
+             {reviews.length > 0 && (
+               <div className="absolute top-6 right-16">
+                 <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/20 rounded-full text-sm font-semibold">
+                   <Activity className="w-4 h-4" />
+                   {reviews.length} pending
+                 </span>
+               </div>
+             )}
+           </div>
+
+           {/* Modal Content */}
+           <div className="max-h-[calc(90vh-200px)] overflow-y-auto p-6">
+             {reviews.length > 0 ? (
+               <div className="space-y-6">
+                 {reviews.map((review) => (
+                   <div
+                     key={review.id}
+                     className="group relative overflow-hidden bg-white border border-slate-200 rounded-xl hover:shadow-lg transition-all duration-300"
+                   >
+                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-slate-50/30 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                     <div className="relative p-6">
+                       <div className="flex items-start justify-between mb-6">
+                         <div className="flex-1">
+                           {/* Action Type and Status */}
+                           <div className="flex items-center gap-3 mb-4">
+                             <span
+                               className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold border ${
+                                 review.action === "CREATE"
+                                   ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+                                   : review.action === "UPDATE"
+                                     ? "text-blue-700 bg-blue-50 border-blue-200"
+                                     : "text-red-700 bg-red-50 border-red-200"
+                               }`}
+                             >
+                               {review.action === "CREATE" && <Plus className="w-3 h-3" />}
+                               {review.action === "UPDATE" && <Edit className="w-3 h-3" />}
+                               {review.action === "DELETE" && <Trash2 className="w-3 h-3" />}
+                               {review.action} Request
+                             </span>
+                             {getStatusBadge(review.status)}
+                           </div>
+
+                           {/* User and Date Info */}
+                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                             <div className="flex items-center gap-3">
+                               <div className="w-10 h-10 bg-gradient-to-br from-slate-100 to-slate-200 rounded-xl flex items-center justify-center">
+                                 <User className="w-5 h-5 text-slate-500" />
+                               </div>
+                               <div>
+                                 <div className="font-semibold text-slate-900 text-sm">{review.creator.username}</div>
+                                 <div className="text-xs text-slate-500">{review.creator.role}</div>
+                               </div>
+                             </div>
+                             <div className="flex items-center gap-3">
+                               <div className="w-10 h-10 bg-gradient-to-br from-slate-100 to-slate-200 rounded-xl flex items-center justify-center">
+                                 <Calendar className="w-5 h-5 text-slate-500" />
+                               </div>
+                               <div>
+                                 <div className="font-semibold text-slate-900 text-sm">
+                                   {new Date(review.createdAt).toLocaleDateString()}
+                                 </div>
+                                 <div className="text-xs text-slate-500">
+                                   {new Date(review.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                 </div>
+                               </div>
+                             </div>
+                           </div>
+
+                           {/* Waste Log Details */}
+                           {review.wasteLog && (
+                             <div className="bg-gradient-to-r from-slate-50 to-slate-50/50 border border-slate-200 rounded-xl p-4 mb-4">
+                               <div className="flex items-center gap-3 mb-2">
+                                 <FileText className="w-5 h-5 text-slate-500" />
+                                 <div>
+                                   <div className="font-semibold text-slate-900">
+                                     {review.wasteLog.itemName}
+                                   </div>
+                                   <div className="text-sm text-slate-500">
+                                     Branch: {review.wasteLog.branch.name}
+                                   </div>
+                                 </div>
+                               </div>
+                             </div>
+                           )}
+
+                           {/* Reason */}
+                           {review.reason && (
+                             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4">
+                               <div className="flex items-start gap-3">
+                                 <Info className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
+                                 <div>
+                                   <div className="font-semibold text-blue-900 text-sm mb-1">Request Reason:</div>
+                                   <div className="text-blue-700 text-sm italic leading-relaxed">
+                                     "{review.reason}"
+                                   </div>
+                                 </div>
+                               </div>
+                             </div>
+                           )}
+                         </div>
+
+                         {/* Action Buttons */}
+                         {review.status === "PENDING" && (
+                           <div className="flex gap-3 ml-6">
+                             <button
+                               onClick={() => handleReviewAction(review.id, "approve")}
+                               className="group/btn flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-sm transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                             >
+                               <CheckCircle className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                               Approve
+                             </button>
+                             <button
+                               onClick={() => handleReviewAction(review.id, "reject")}
+                               className="group/btn flex items-center gap-2 px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl font-semibold text-sm transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                             >
+                               <XCircle className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                               Reject
+                             </button>
+                           </div>
+                         )}
+                       </div>
+                     </div>
+                   </div>
+                 ))}
+               </div>
+             ) : (
+               <div className="text-center py-16">
+                 <div className="w-20 h-20 bg-gradient-to-br from-emerald-100 to-emerald-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                   <CheckCircle className="w-10 h-10 text-emerald-600" />
+                 </div>
+                 <h3 className="text-xl font-semibold text-slate-900 mb-3">All caught up!</h3>
+                 <p className="text-slate-500 max-w-md mx-auto">
+                   No pending reviews at this time. All requests have been processed.
+                 </p>
+               </div>
+             )}
+           </div>
+
+           {/* Modal Footer */}
+           <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+             <div className="flex items-center gap-2 text-slate-600">
+               <Activity className="w-4 h-4" />
+               <span className="text-sm font-medium">
+                 {reviews.length} pending review{reviews.length !== 1 ? "s" : ""}
+               </span>
+             </div>
+             <button 
+               onClick={() => setShowReviews(false)} 
+               className="px-6 py-3 bg-gradient-to-r from-kitchzero-primary to-kitchzero-secondary text-white rounded-xl hover:from-kitchzero-primary/90 hover:to-kitchzero-secondary/90 transition-all duration-200 font-semibold text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+             >
+               Close Reviews
+             </button>
+           </div>
+         </div>
+       </div>
+     )}
+   </div>
+ )
 }
