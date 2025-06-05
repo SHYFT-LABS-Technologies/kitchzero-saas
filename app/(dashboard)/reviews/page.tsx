@@ -9,18 +9,15 @@ import {
   XCircle,
   FileText,
   User,
-  Calendar,
   Search,
   RefreshCw,
   Plus,
   Edit,
   Trash2,
   ChevronDown,
-  ChevronRight,
   Shield,
   Eye,
   Building2,
-  Package,
   MessageSquare,
   TrendingUp,
 } from "lucide-react"
@@ -68,7 +65,8 @@ interface WasteLogReview {
 export default function ReviewsPage() {
   const { user } = useAuth()
   const { toasts, addToast, removeToast } = useToast()
-  const [reviews, setReviews] = useState<WasteLogReview[]>([])
+  const [allReviews, setAllReviews] = useState<WasteLogReview[]>([]) // For stats cards
+  const [reviews, setReviews] = useState<WasteLogReview[]>([]) // For filtered display
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("PENDING")
@@ -78,9 +76,34 @@ export default function ReviewsPage() {
 
   useEffect(() => {
     if (user?.role === "SUPER_ADMIN") {
-      fetchReviews()
+      fetchAllReviews() // Fetch all reviews for stats
+      fetchReviews() // Fetch filtered reviews for display
     }
-  }, [user, statusFilter])
+  }, [user])
+
+  useEffect(() => {
+    if (user?.role === "SUPER_ADMIN") {
+      fetchReviews().catch(() => {
+        addToast({
+          type: "error",
+          title: "Error",
+          message: "Failed to fetch reviews. Please try again.",
+        })
+      })
+    }
+  }, [statusFilter])
+
+  const fetchAllReviews = async () => {
+    try {
+      const response = await fetch("/api/reviews") // No status filter for stats
+      if (response.ok) {
+        const data = await response.json()
+        setAllReviews(data.reviews || [])
+      }
+    } catch (error) {
+      console.error("Failed to fetch all reviews:", error)
+    }
+  }
 
   const fetchReviews = async () => {
     try {
@@ -89,28 +112,32 @@ export default function ReviewsPage() {
       if (response.ok) {
         const data = await response.json()
         setReviews(data.reviews || [])
-        addToast({
-          type: "success",
-          title: "Data Refreshed",
-          message: "Review data has been refreshed successfully.",
-        })
       } else {
         console.error("Failed to fetch reviews:", response.statusText)
-        addToast({
-          type: "error",
-          title: "Error",
-          message: "Failed to fetch reviews. Please try again.",
-        })
+        throw new Error("Failed to fetch reviews")
       }
     } catch (error) {
       console.error("Failed to fetch reviews:", error)
+      throw error
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const refreshData = async () => {
+    try {
+      await Promise.all([fetchAllReviews(), fetchReviews()])
+      addToast({
+        type: "success",
+        title: "Data Refreshed",
+        message: "Review data has been refreshed successfully.",
+      })
+    } catch (error) {
       addToast({
         type: "error",
         title: "Error",
-        message: "Failed to fetch reviews. Please try again.",
+        message: "Failed to refresh data. Please try again.",
       })
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -133,7 +160,7 @@ export default function ReviewsPage() {
           title: `Request ${action === "approve" ? "Approved" : "Rejected"}`,
           message: `The request has been successfully ${action}d.`,
         })
-        fetchReviews()
+        refreshData() // Refresh both all reviews and filtered reviews
       } else {
         throw new Error(`Failed to ${action} review`)
       }
@@ -282,7 +309,7 @@ export default function ReviewsPage() {
 
               <div className="mt-6 lg:mt-0 flex items-center space-x-3">
                 <button
-                  onClick={fetchReviews}
+                  onClick={refreshData}
                   disabled={loading}
                   className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 font-medium text-sm shadow-sm ${
                     loading ? "opacity-50 cursor-not-allowed" : "hover:shadow-md"
@@ -296,7 +323,7 @@ export default function ReviewsPage() {
           </div>
         </div>
 
-        {/* Enhanced Modern Stats Cards */}
+        {/* Enhanced Modern Stats Cards - Using allReviews for accurate totals */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {/* Pending Reviews Card */}
           <div className="group relative overflow-hidden bg-white rounded-2xl border border-slate-200/60 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
@@ -308,7 +335,7 @@ export default function ReviewsPage() {
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-slate-900">
-                    {reviews.filter((r) => r.status === "PENDING").length}
+                    {allReviews.filter((r) => r.status === "PENDING").length}
                   </div>
                   <div className="text-xs text-slate-500 font-medium">PENDING</div>
                 </div>
@@ -331,7 +358,7 @@ export default function ReviewsPage() {
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-slate-900">
-                    {reviews.filter((r) => r.status === "APPROVED").length}
+                    {allReviews.filter((r) => r.status === "APPROVED").length}
                   </div>
                   <div className="text-xs text-slate-500 font-medium">APPROVED</div>
                 </div>
@@ -354,7 +381,7 @@ export default function ReviewsPage() {
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-slate-900">
-                    {reviews.filter((r) => r.status === "REJECTED").length}
+                    {allReviews.filter((r) => r.status === "REJECTED").length}
                   </div>
                   <div className="text-xs text-slate-500 font-medium">REJECTED</div>
                 </div>
@@ -376,7 +403,7 @@ export default function ReviewsPage() {
                   <TrendingUp className="w-6 h-6 text-white" />
                 </div>
                 <div className="text-right">
-                  <div className="text-2xl font-bold text-slate-900">{reviews.length}</div>
+                  <div className="text-2xl font-bold text-slate-900">{allReviews.length}</div>
                   <div className="text-xs text-slate-500 font-medium">TOTAL</div>
                 </div>
               </div>
@@ -440,192 +467,290 @@ export default function ReviewsPage() {
           </div>
         </div>
 
-        {/* Enhanced Reviews List */}
-        <div className="space-y-6">
+        {/* Enhanced Professional Reviews Table */}
+        <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
+          {/* Table Header */}
+          <div className="px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-slate-100/50">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-semibold text-slate-900">Review Requests</h2>
+                <p className="text-sm text-slate-500 mt-1">
+                  {filteredReviews.length} of {reviews.length} requests shown
+                </p>
+              </div>
+              <div className="text-sm text-slate-500">
+                Status: <span className="font-medium text-slate-700">{statusFilter || "All"}</span>
+              </div>
+            </div>
+          </div>
+
           {filteredReviews.length > 0 ? (
-            filteredReviews.map((review) => (
-              <div
-                key={review.id}
-                className="group relative overflow-hidden bg-white rounded-2xl border border-slate-200/60 shadow-sm hover:shadow-xl transition-all duration-300"
-              >
-                <div className="p-6 space-y-6">
-                  {/* Enhanced Header */}
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center space-x-4">
-                      <div className="w-14 h-14 bg-gradient-to-br from-slate-100 to-slate-200 rounded-xl flex items-center justify-center group-hover:from-kitchzero-primary/10 group-hover:to-kitchzero-secondary/10 transition-all duration-200">
-                        {getActionIcon(review.action)}
-                      </div>
-                      <div>
-                        <div className="flex items-center space-x-3 mb-3">
-                          <span
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border ${getActionColor(
-                              review.action,
-                            )}`}
-                          >
-                            {review.action} Request
-                          </span>
-                          {getStatusBadge(review.status)}
-                        </div>
-                        <div className="flex items-center space-x-6 text-sm text-slate-500">
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gradient-to-r from-slate-50 to-slate-100/50 border-b border-slate-200">
+                    <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm">Request Details</th>
+                    <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm">Requestor</th>
+                    <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm">Item Information</th>
+                    <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm">Status</th>
+                    <th className="text-left py-4 px-6 font-semibold text-slate-700 text-sm">Date</th>
+                    <th className="text-right py-4 px-6 font-semibold text-slate-700 text-sm">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredReviews.map((review) => (
+                    <>
+                      {/* Main Row */}
+                      <tr
+                        key={review.id}
+                        className="group hover:bg-gradient-to-r hover:from-slate-50/50 hover:to-transparent transition-all duration-200"
+                      >
+                        {/* Request Details */}
+                        <td className="py-5 px-6">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 bg-gradient-to-br from-slate-100 to-slate-200 rounded-lg flex items-center justify-center group-hover:from-kitchzero-primary/10 group-hover:to-kitchzero-secondary/10 transition-all duration-200">
+                              {getActionIcon(review.action)}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2 mb-1">
+                                <span
+                                  className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold border ${getActionColor(
+                                    review.action,
+                                  )}`}
+                                >
+                                  {review.action}
+                                </span>
+                              </div>
+                              <div className="text-sm font-medium text-slate-900">{review.action} Request</div>
+                              <div className="text-xs text-slate-500">ID: {review.id.slice(0, 8)}...</div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Requestor */}
+                        <td className="py-5 px-6">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-gradient-to-br from-slate-200 to-slate-300 rounded-lg flex items-center justify-center">
                               <User className="w-4 h-4 text-slate-600" />
                             </div>
                             <div>
-                              <span className="font-semibold text-slate-900">{review.creator.username}</span>
-                              {review.creator.branch && (
-                                <div className="text-xs text-slate-500 flex items-center gap-1">
-                                  <Building2 className="w-3 h-3" />
-                                  {review.creator.branch.name}
+                              <div className="text-sm font-semibold text-slate-900">{review.creator.username}</div>
+                              <div className="text-xs text-slate-500 flex items-center gap-1">
+                                {review.creator.branch && (
+                                  <>
+                                    <Building2 className="w-3 h-3" />
+                                    {review.creator.branch.name}
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Item Information */}
+                        <td className="py-5 px-6">
+                          {review.newData ? (
+                            <div>
+                              <div className="text-sm font-semibold text-slate-900 mb-1">{review.newData.itemName}</div>
+                              <div className="text-xs text-slate-500 space-y-0.5">
+                                <div>
+                                  Qty: {review.newData.quantity} {review.newData.unit}
                                 </div>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Calendar className="w-4 h-4" />
-                            <span>{new Date(review.createdAt).toLocaleDateString()}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={() => setExpandedReview(expandedReview === review.id ? null : review.id)}
-                      className="p-3 text-slate-400 hover:text-kitchzero-primary hover:bg-kitchzero-primary/5 rounded-xl transition-all duration-200 group/btn"
-                    >
-                      {expandedReview === review.id ? (
-                        <ChevronDown className="w-5 h-5 group-hover/btn:scale-110 transition-transform" />
-                      ) : (
-                        <ChevronRight className="w-5 h-5 group-hover/btn:scale-110 transition-transform" />
-                      )}
-                    </button>
-                  </div>
-
-                  {/* Enhanced Quick Info Grid */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    {review.newData && (
-                      <div className="relative overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100/50 p-5 rounded-xl border border-slate-200/60">
-                        <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-kitchzero-primary/10 to-kitchzero-secondary/10 rounded-full -translate-y-10 translate-x-10"></div>
-                        <div className="relative">
-                          <div className="flex items-center gap-2 mb-3">
-                            <Package className="w-4 h-4 text-slate-600" />
-                            <p className="text-sm font-semibold text-slate-700">
-                              {review.action === "CREATE" ? "New Item Details" : "Item Information"}
-                            </p>
-                          </div>
-                          <h4 className="text-lg font-bold text-slate-900 mb-3">{review.newData.itemName}</h4>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div className="text-center p-3 bg-white rounded-lg border border-slate-200/60">
-                              <div className="text-lg font-bold text-slate-900">
-                                {review.newData.quantity} {review.newData.unit}
-                              </div>
-                              <div className="text-xs text-slate-500 font-medium">Quantity</div>
-                            </div>
-                            <div className="text-center p-3 bg-white rounded-lg border border-slate-200/60">
-                              <div className="text-lg font-bold text-slate-900">
-                                {review.newData.value?.toLocaleString("en-LK", {
-                                  style: "currency",
-                                  currency: "LKR",
-                                  minimumFractionDigits: 0,
-                                })}
-                              </div>
-                              <div className="text-xs text-slate-500 font-medium">Value</div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {review.reason && (
-                      <div className="relative overflow-hidden bg-gradient-to-br from-blue-50 to-blue-100/50 p-5 rounded-xl border border-blue-200/60">
-                        <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-blue-200/20 to-blue-300/20 rounded-full -translate-y-10 translate-x-10"></div>
-                        <div className="relative">
-                          <div className="flex items-center gap-2 mb-3">
-                            <MessageSquare className="w-4 h-4 text-blue-600" />
-                            <p className="text-sm font-semibold text-blue-800">Request Reason</p>
-                          </div>
-                          <p className="text-sm text-blue-700 italic leading-relaxed">"{review.reason}"</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Enhanced Expanded Details */}
-                  {expandedReview === review.id && (
-                    <div className="pt-6 border-t border-slate-200 space-y-4">
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                        {review.originalData && (
-                          <div className="bg-gradient-to-br from-orange-50 to-orange-100/50 p-5 rounded-xl border border-orange-200/60">
-                            <h5 className="font-semibold text-orange-800 mb-3 flex items-center gap-2">
-                              <Eye className="w-4 h-4" />
-                              Original Data
-                            </h5>
-                            <div className="space-y-2 text-sm">
-                              <div className="flex justify-between">
-                                <span className="text-orange-700">Item:</span>
-                                <span className="font-medium text-orange-900">{review.originalData.itemName}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-orange-700">Quantity:</span>
-                                <span className="font-medium text-orange-900">
-                                  {review.originalData.quantity} {review.originalData.unit}
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-orange-700">Value:</span>
-                                <span className="font-medium text-orange-900">
-                                  {review.originalData.value?.toLocaleString("en-LK", {
+                                <div>
+                                  Value:{" "}
+                                  {review.newData.value?.toLocaleString("en-LK", {
                                     style: "currency",
                                     currency: "LKR",
+                                    minimumFractionDigits: 0,
                                   })}
-                                </span>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        )}
+                          ) : (
+                            <div className="text-sm text-slate-500 italic">No item data</div>
+                          )}
+                        </td>
 
-                        {review.reviewNotes && (
-                          <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 p-5 rounded-xl border border-purple-200/60">
-                            <h5 className="font-semibold text-purple-800 mb-3 flex items-center gap-2">
-                              <MessageSquare className="w-4 h-4" />
-                              Review Notes
-                            </h5>
-                            <p className="text-sm text-purple-700 italic">{review.reviewNotes}</p>
-                            {review.approver && (
-                              <div className="mt-3 pt-3 border-t border-purple-200 text-xs text-purple-600">
-                                Reviewed by: <span className="font-medium">{review.approver.username}</span>
-                              </div>
+                        {/* Status */}
+                        <td className="py-5 px-6">
+                          {getStatusBadge(review.status)}
+                          {review.reviewNotes && (
+                            <div className="mt-1">
+                              <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+                                <MessageSquare className="w-3 h-3" />
+                                Has notes
+                              </span>
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Date */}
+                        <td className="py-5 px-6">
+                          <div className="text-sm font-medium text-slate-900">
+                            {new Date(review.createdAt).toLocaleDateString()}
+                          </div>
+                          <div className="text-xs text-slate-500 flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {new Date(review.createdAt).toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            })}
+                          </div>
+                        </td>
+
+                        {/* Actions */}
+                        <td className="py-5 px-6">
+                          <div className="flex items-center justify-end gap-2">
+                            {/* View Details Button */}
+                            <button
+                              onClick={() => setExpandedReview(expandedReview === review.id ? null : review.id)}
+                              className="p-2 text-slate-400 hover:text-kitchzero-primary hover:bg-kitchzero-primary/5 rounded-lg transition-all duration-200 group/btn"
+                              title="View Details"
+                            >
+                              {expandedReview === review.id ? (
+                                <ChevronDown className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                              ) : (
+                                <Eye className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                              )}
+                            </button>
+
+                            {/* Action Buttons for Pending Reviews */}
+                            {review.status === "PENDING" && (
+                              <>
+                                <button
+                                  onClick={() => handleReviewAction(review.id, "reject")}
+                                  disabled={processingReview === review.id}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 rounded-lg transition-all duration-200 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Reject Request"
+                                >
+                                  <XCircle className="w-3.5 h-3.5" />
+                                  {processingReview === review.id ? "..." : "Reject"}
+                                </button>
+                                <button
+                                  onClick={() => handleReviewAction(review.id, "approve")}
+                                  disabled={processingReview === review.id}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-all duration-200 text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                                  title="Approve Request"
+                                >
+                                  <CheckCircle className="w-3.5 h-3.5" />
+                                  {processingReview === review.id ? "..." : "Approve"}
+                                </button>
+                              </>
                             )}
                           </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
+                        </td>
+                      </tr>
 
-                  {/* Enhanced Action Buttons */}
-                  {review.status === "PENDING" && (
-                    <div className="flex justify-end space-x-3 pt-6 border-t border-slate-200">
-                      <button
-                        onClick={() => handleReviewAction(review.id, "reject")}
-                        disabled={processingReview === review.id}
-                        className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:from-red-600 hover:to-red-700 transition-all duration-200 font-semibold text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                      >
-                        <XCircle className="w-4 h-4" />
-                        <span>{processingReview === review.id ? "Processing..." : "Reject"}</span>
-                      </button>
-                      <button
-                        onClick={() => handleReviewAction(review.id, "approve")}
-                        disabled={processingReview === review.id}
-                        className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl hover:from-emerald-600 hover:to-emerald-700 transition-all duration-200 font-semibold text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-                      >
-                        <CheckCircle className="w-4 h-4" />
-                        <span>{processingReview === review.id ? "Processing..." : "Approve"}</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))
+                      {/* Expanded Details Row */}
+                      {expandedReview === review.id && (
+                        <tr className="bg-gradient-to-r from-slate-50/30 to-transparent">
+                          <td colSpan={6} className="px-6 py-6">
+                            <div className="bg-white rounded-xl border border-slate-200/60 p-6">
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                {/* Request Reason */}
+                                {review.reason && (
+                                  <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 p-4 rounded-lg border border-blue-200/60">
+                                    <h5 className="font-semibold text-blue-800 mb-2 flex items-center gap-2">
+                                      <MessageSquare className="w-4 h-4" />
+                                      Request Reason
+                                    </h5>
+                                    <p className="text-sm text-blue-700 italic leading-relaxed">"{review.reason}"</p>
+                                  </div>
+                                )}
+
+                                {/* Original Data */}
+                                {review.originalData && (
+                                  <div className="bg-gradient-to-br from-orange-50 to-orange-100/50 p-4 rounded-lg border border-orange-200/60">
+                                    <h5 className="font-semibold text-orange-800 mb-3 flex items-center gap-2">
+                                      <Eye className="w-4 h-4" />
+                                      Original Data
+                                    </h5>
+                                    <div className="space-y-2 text-sm">
+                                      <div className="flex justify-between">
+                                        <span className="text-orange-700">Item:</span>
+                                        <span className="font-medium text-orange-900">
+                                          {review.originalData.itemName}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-orange-700">Quantity:</span>
+                                        <span className="font-medium text-orange-900">
+                                          {review.originalData.quantity} {review.originalData.unit}
+                                        </span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span className="text-orange-700">Value:</span>
+                                        <span className="font-medium text-orange-900">
+                                          {review.originalData.value?.toLocaleString("en-LK", {
+                                            style: "currency",
+                                            currency: "LKR",
+                                          })}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Review Notes */}
+                                {review.reviewNotes && (
+                                  <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 p-4 rounded-lg border border-purple-200/60 lg:col-span-2">
+                                    <h5 className="font-semibold text-purple-800 mb-2 flex items-center gap-2">
+                                      <MessageSquare className="w-4 h-4" />
+                                      Review Notes
+                                    </h5>
+                                    <p className="text-sm text-purple-700 italic mb-3">{review.reviewNotes}</p>
+                                    {review.approver && (
+                                      <div className="pt-2 border-t border-purple-200 text-xs text-purple-600">
+                                        Reviewed by: <span className="font-medium">{review.approver.username}</span>
+                                        {review.reviewedAt && (
+                                          <span className="ml-2">
+                                            on {new Date(review.reviewedAt).toLocaleDateString()}
+                                          </span>
+                                        )}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Additional Details */}
+                                <div className="bg-gradient-to-br from-slate-50 to-slate-100/50 p-4 rounded-lg border border-slate-200/60 lg:col-span-2">
+                                  <h5 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                                    <FileText className="w-4 h-4" />
+                                    Request Timeline
+                                  </h5>
+                                  <div className="space-y-2 text-sm">
+                                    <div className="flex justify-between">
+                                      <span className="text-slate-600">Submitted:</span>
+                                      <span className="font-medium text-slate-900">
+                                        {new Date(review.createdAt).toLocaleString()}
+                                      </span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                      <span className="text-slate-600">Last Updated:</span>
+                                      <span className="font-medium text-slate-900">
+                                        {new Date(review.updatedAt).toLocaleString()}
+                                      </span>
+                                    </div>
+                                    {review.reviewedAt && (
+                                      <div className="flex justify-between">
+                                        <span className="text-slate-600">Reviewed:</span>
+                                        <span className="font-medium text-slate-900">
+                                          {new Date(review.reviewedAt).toLocaleString()}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <div className="text-center py-16 px-6">
               <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
