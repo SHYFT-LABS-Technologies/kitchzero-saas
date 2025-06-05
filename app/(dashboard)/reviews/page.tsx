@@ -7,7 +7,6 @@ import {
   Clock,
   CheckCircle,
   XCircle,
-  AlertCircle,
   FileText,
   User,
   Calendar,
@@ -18,6 +17,12 @@ import {
   Trash2,
   ChevronDown,
   ChevronRight,
+  Shield,
+  Eye,
+  Building2,
+  Package,
+  MessageSquare,
+  TrendingUp,
 } from "lucide-react"
 
 interface WasteLogReview {
@@ -84,6 +89,11 @@ export default function ReviewsPage() {
       if (response.ok) {
         const data = await response.json()
         setReviews(data.reviews || [])
+        addToast({
+          type: "success",
+          title: "Data Refreshed",
+          message: "Review data has been refreshed successfully.",
+        })
       } else {
         console.error("Failed to fetch reviews:", response.statusText)
         addToast({
@@ -142,26 +152,26 @@ export default function ReviewsPage() {
   const getActionIcon = (action: string) => {
     switch (action) {
       case "CREATE":
-        return <Plus className="w-5 h-5 text-green-600" />
+        return <Plus className="w-5 h-5 text-emerald-600" />
       case "UPDATE":
         return <Edit className="w-5 h-5 text-blue-600" />
       case "DELETE":
         return <Trash2 className="w-5 h-5 text-red-600" />
       default:
-        return <FileText className="w-5 h-5 text-gray-600" />
+        return <FileText className="w-5 h-5 text-slate-600" />
     }
   }
 
   const getActionColor = (action: string) => {
     switch (action) {
       case "CREATE":
-        return "text-green-600 bg-green-50 border-green-200"
+        return "text-emerald-700 bg-emerald-50 border-emerald-200"
       case "UPDATE":
-        return "text-blue-600 bg-blue-50 border-blue-200"
+        return "text-blue-700 bg-blue-50 border-blue-200"
       case "DELETE":
-        return "text-red-600 bg-red-50 border-red-200"
+        return "text-red-700 bg-red-50 border-red-200"
       default:
-        return "text-gray-600 bg-gray-50 border-gray-200"
+        return "text-slate-700 bg-slate-50 border-slate-200"
     }
   }
 
@@ -169,22 +179,22 @@ export default function ReviewsPage() {
     switch (status) {
       case "PENDING":
         return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-yellow-100 text-yellow-800 border border-yellow-200">
-            <Clock className="w-4 h-4 mr-1" />
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+            <Clock className="w-3 h-3" />
             Pending Review
           </span>
         )
       case "APPROVED":
         return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800 border border-green-200">
-            <CheckCircle className="w-4 h-4 mr-1" />
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <CheckCircle className="w-3 h-3" />
             Approved
           </span>
         )
       case "REJECTED":
         return (
-          <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800 border border-red-200">
-            <XCircle className="w-4 h-4 mr-1" />
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200">
+            <XCircle className="w-3 h-3" />
             Rejected
           </span>
         )
@@ -211,228 +221,425 @@ export default function ReviewsPage() {
 
   if (user?.role !== "SUPER_ADMIN") {
     return (
-      <div className="text-center py-12">
-        <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-        <h1 className="text-2xl font-bold text-kitchzero-text mb-4">Access Denied</h1>
-        <p className="text-kitchzero-text/70">Only Super Admins can access the reviews page.</p>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
+        <div className="flex items-center justify-center h-96">
+          <div className="text-center">
+            <div className="w-20 h-20 bg-gradient-to-br from-red-100 to-red-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <Shield className="w-10 h-10 text-red-600" />
+            </div>
+            <h1 className="text-2xl font-bold text-slate-900 mb-3">Access Denied</h1>
+            <p className="text-slate-500 max-w-md mx-auto">
+              Only Super Admins can access the reviews page. Please contact your administrator for access.
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
+        <div className="flex items-center justify-center h-96">
+          <div className="flex flex-col items-center space-y-4">
+            <div className="relative">
+              <div className="w-16 h-16 border-4 border-kitchzero-primary/20 rounded-full animate-spin border-t-kitchzero-primary"></div>
+              <div className="absolute inset-0 w-16 h-16 border-4 border-transparent border-r-kitchzero-secondary rounded-full animate-spin animate-reverse"></div>
+            </div>
+            <div className="text-center">
+              <h3 className="text-lg font-semibold text-slate-900">Loading Review Management</h3>
+              <p className="text-sm text-slate-500 mt-1">Fetching your data...</p>
+            </div>
+          </div>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="space-y-8">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
 
-      {/* Header Section */}
-      <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-kitchzero-text">Review Management</h1>
-          <p className="text-kitchzero-text/70 mt-2">Review and approve changes requested by branch administrators</p>
-        </div>
-        <div className="mt-4 lg:mt-0 flex items-center space-x-4">
-          <button
-            onClick={fetchReviews}
-            className="flex items-center space-x-2 px-4 py-2 border border-kitchzero-border rounded-lg hover:bg-gray-50 transition-colors"
-          >
-            <RefreshCw className="w-4 h-4" />
-            <span>Refresh</span>
-          </button>
-        </div>
-      </div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* Enhanced Header Section */}
+        <div className="relative overflow-hidden bg-white rounded-2xl border border-slate-200/60 shadow-sm">
+          <div className="absolute inset-0 bg-gradient-to-r from-kitchzero-primary/5 via-transparent to-kitchzero-secondary/5"></div>
+          <div className="relative px-8 py-6">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-kitchzero-primary to-kitchzero-secondary rounded-xl flex items-center justify-center shadow-lg">
+                  <FileText className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-2xl lg:text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
+                    Review Management
+                  </h1>
+                  <p className="text-slate-600 mt-1 text-sm lg:text-base">
+                    Review and approve changes requested by branch administrators
+                  </p>
+                </div>
+              </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="card group hover:shadow-lg transition-all duration-200 border-l-4 border-l-yellow-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-kitchzero-text/70">Pending Reviews</p>
-              <p className="text-2xl font-bold text-kitchzero-text">
-                {reviews.filter((r) => r.status === "PENDING").length}
-              </p>
+              <div className="mt-6 lg:mt-0 flex items-center space-x-3">
+                <button
+                  onClick={fetchReviews}
+                  disabled={loading}
+                  className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 font-medium text-sm shadow-sm ${
+                    loading ? "opacity-50 cursor-not-allowed" : "hover:shadow-md"
+                  }`}
+                >
+                  <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
+                  {loading ? "Refreshing..." : "Refresh"}
+                </button>
+              </div>
             </div>
-            <Clock className="w-8 h-8 text-yellow-500" />
           </div>
         </div>
 
-        <div className="card group hover:shadow-lg transition-all duration-200 border-l-4 border-l-green-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-kitchzero-text/70">Approved</p>
-              <p className="text-2xl font-bold text-kitchzero-text">
-                {reviews.filter((r) => r.status === "APPROVED").length}
-              </p>
+        {/* Enhanced Modern Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Pending Reviews Card */}
+          <div className="group relative overflow-hidden bg-white rounded-2xl border border-slate-200/60 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+            <div className="absolute inset-0 bg-gradient-to-br from-amber-50/50 to-orange-50/30"></div>
+            <div className="relative p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                  <Clock className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-slate-900">
+                    {reviews.filter((r) => r.status === "PENDING").length}
+                  </div>
+                  <div className="text-xs text-slate-500 font-medium">PENDING</div>
+                </div>
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-700 mb-1">Pending Reviews</h3>
+                <p className="text-sm text-slate-500">Awaiting approval</p>
+              </div>
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 to-orange-600 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
             </div>
-            <CheckCircle className="w-8 h-8 text-green-500" />
           </div>
-        </div>
 
-        <div className="card group hover:shadow-lg transition-all duration-200 border-l-4 border-l-red-500">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-kitchzero-text/70">Rejected</p>
-              <p className="text-2xl font-bold text-kitchzero-text">
-                {reviews.filter((r) => r.status === "REJECTED").length}
-              </p>
+          {/* Approved Reviews Card */}
+          <div className="group relative overflow-hidden bg-white rounded-2xl border border-slate-200/60 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+            <div className="absolute inset-0 bg-gradient-to-br from-emerald-50/50 to-teal-50/30"></div>
+            <div className="relative p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                  <CheckCircle className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-slate-900">
+                    {reviews.filter((r) => r.status === "APPROVED").length}
+                  </div>
+                  <div className="text-xs text-slate-500 font-medium">APPROVED</div>
+                </div>
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-700 mb-1">Approved</h3>
+                <p className="text-sm text-slate-500">Successfully processed</p>
+              </div>
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 to-teal-600 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
             </div>
-            <XCircle className="w-8 h-8 text-red-500" />
           </div>
-        </div>
 
-        <div className="card group hover:shadow-lg transition-all duration-200 border-l-4 border-l-kitchzero-primary">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-kitchzero-text/70">Total Reviews</p>
-              <p className="text-2xl font-bold text-kitchzero-text">{reviews.length}</p>
+          {/* Rejected Reviews Card */}
+          <div className="group relative overflow-hidden bg-white rounded-2xl border border-slate-200/60 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+            <div className="absolute inset-0 bg-gradient-to-br from-red-50/50 to-pink-50/30"></div>
+            <div className="relative p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-red-500 to-pink-600 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                  <XCircle className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-slate-900">
+                    {reviews.filter((r) => r.status === "REJECTED").length}
+                  </div>
+                  <div className="text-xs text-slate-500 font-medium">REJECTED</div>
+                </div>
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-700 mb-1">Rejected</h3>
+                <p className="text-sm text-slate-500">Declined requests</p>
+              </div>
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-red-500 to-pink-600 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
             </div>
-            <FileText className="w-8 h-8 text-kitchzero-primary" />
           </div>
-        </div>
-      </div>
 
-      {/* Filters */}
-      <div className="card">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-          <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input
-                type="text"
-                placeholder="Search reviews..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 input w-full sm:w-64"
-              />
+          {/* Total Reviews Card */}
+          <div className="group relative overflow-hidden bg-white rounded-2xl border border-slate-200/60 shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-50/50 to-violet-50/30"></div>
+            <div className="relative p-6">
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform duration-300">
+                  <TrendingUp className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-slate-900">{reviews.length}</div>
+                  <div className="text-xs text-slate-500 font-medium">TOTAL</div>
+                </div>
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-700 mb-1">Total Reviews</h3>
+                <p className="text-sm text-slate-500">All time requests</p>
+              </div>
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 to-violet-600 transform scale-x-0 group-hover:scale-x-100 transition-transform duration-300"></div>
             </div>
-
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="select">
-              <option value="PENDING">Pending</option>
-              <option value="APPROVED">Approved</option>
-              <option value="REJECTED">Rejected</option>
-              <option value="">All Status</option>
-            </select>
-
-            <select value={actionFilter} onChange={(e) => setActionFilter(e.target.value)} className="select">
-              <option value="">All Actions</option>
-              <option value="CREATE">Create</option>
-              <option value="UPDATE">Update</option>
-              <option value="DELETE">Delete</option>
-            </select>
           </div>
         </div>
-      </div>
 
-      {/* Reviews List */}
-      <div className="space-y-4">
-        {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-kitchzero-primary"></div>
-            <p className="ml-4 text-kitchzero-text">Loading reviews...</p>
+        {/* Enhanced Search and Filters */}
+        <div className="bg-white rounded-2xl border border-slate-200/60 shadow-sm overflow-hidden">
+          <div className="p-6">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0 lg:space-x-4">
+              <div className="flex flex-col sm:flex-row sm:items-center space-y-3 sm:space-y-0 sm:space-x-3">
+                {/* Enhanced Search Input */}
+                <div className="relative group">
+                  <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4 group-focus-within:text-kitchzero-primary transition-colors" />
+                  <input
+                    type="text"
+                    placeholder="Search reviews..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full sm:w-80 pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200 text-sm"
+                  />
+                </div>
+
+                {/* Status Filter */}
+                <div className="relative">
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="appearance-none bg-white border border-slate-200 rounded-xl px-4 py-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200"
+                  >
+                    <option value="PENDING">Pending</option>
+                    <option value="APPROVED">Approved</option>
+                    <option value="REJECTED">Rejected</option>
+                    <option value="">All Status</option>
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                </div>
+
+                {/* Action Filter */}
+                <div className="relative">
+                  <select
+                    value={actionFilter}
+                    onChange={(e) => setActionFilter(e.target.value)}
+                    className="appearance-none bg-white border border-slate-200 rounded-xl px-4 py-3 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200"
+                  >
+                    <option value="">All Actions</option>
+                    <option value="CREATE">Create</option>
+                    <option value="UPDATE">Update</option>
+                    <option value="DELETE">Delete</option>
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                </div>
+              </div>
+            </div>
           </div>
-        ) : filteredReviews.length > 0 ? (
-          filteredReviews.map((review) => (
-            <div key={review.id} className="card hover:shadow-lg transition-all duration-200">
-              <div className="space-y-4">
-                {/* Header */}
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="p-2 rounded-lg bg-gray-50">{getActionIcon(review.action)}</div>
-                    <div>
-                      <div className="flex items-center space-x-3 mb-2">
-                        <span
-                          className={`px-3 py-1 rounded-full text-sm font-medium border ${getActionColor(review.action)}`}
-                        >
-                          {review.action} Request
-                        </span>
-                        {getStatusBadge(review.status)}
+        </div>
+
+        {/* Enhanced Reviews List */}
+        <div className="space-y-6">
+          {filteredReviews.length > 0 ? (
+            filteredReviews.map((review) => (
+              <div
+                key={review.id}
+                className="group relative overflow-hidden bg-white rounded-2xl border border-slate-200/60 shadow-sm hover:shadow-xl transition-all duration-300"
+              >
+                <div className="p-6 space-y-6">
+                  {/* Enhanced Header */}
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center space-x-4">
+                      <div className="w-14 h-14 bg-gradient-to-br from-slate-100 to-slate-200 rounded-xl flex items-center justify-center group-hover:from-kitchzero-primary/10 group-hover:to-kitchzero-secondary/10 transition-all duration-200">
+                        {getActionIcon(review.action)}
                       </div>
-                      <div className="flex items-center space-x-4 text-sm text-kitchzero-text/70">
-                        <div className="flex items-center space-x-1">
-                          <User className="w-4 h-4" />
-                          <span className="font-medium">{review.creator.username}</span>
-                          {review.creator.branch && <span>({review.creator.branch.name})</span>}
+                      <div>
+                        <div className="flex items-center space-x-3 mb-3">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border ${getActionColor(
+                              review.action,
+                            )}`}
+                          >
+                            {review.action} Request
+                          </span>
+                          {getStatusBadge(review.status)}
                         </div>
-                        <div className="flex items-center space-x-1">
-                          <Calendar className="w-4 h-4" />
-                          <span>{new Date(review.createdAt).toLocaleDateString()}</span>
+                        <div className="flex items-center space-x-6 text-sm text-slate-500">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 bg-slate-100 rounded-lg flex items-center justify-center">
+                              <User className="w-4 h-4 text-slate-600" />
+                            </div>
+                            <div>
+                              <span className="font-semibold text-slate-900">{review.creator.username}</span>
+                              {review.creator.branch && (
+                                <div className="text-xs text-slate-500 flex items-center gap-1">
+                                  <Building2 className="w-3 h-3" />
+                                  {review.creator.branch.name}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Calendar className="w-4 h-4" />
+                            <span>{new Date(review.createdAt).toLocaleDateString()}</span>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className="flex items-center space-x-2">
                     <button
                       onClick={() => setExpandedReview(expandedReview === review.id ? null : review.id)}
-                      className="p-2 text-kitchzero-primary hover:bg-kitchzero-primary/10 rounded-lg transition-colors"
+                      className="p-3 text-slate-400 hover:text-kitchzero-primary hover:bg-kitchzero-primary/5 rounded-xl transition-all duration-200 group/btn"
                     >
                       {expandedReview === review.id ? (
-                        <ChevronDown className="w-5 h-5" />
+                        <ChevronDown className="w-5 h-5 group-hover/btn:scale-110 transition-transform" />
                       ) : (
-                        <ChevronRight className="w-5 h-5" />
+                        <ChevronRight className="w-5 h-5 group-hover/btn:scale-110 transition-transform" />
                       )}
                     </button>
                   </div>
-                </div>
 
-                {/* Quick Info */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {review.newData && (
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <p className="text-sm font-medium text-kitchzero-text mb-1">
-                        {review.action === "CREATE" ? "New Item" : "Item Details"}
-                      </p>
-                      <p className="font-semibold text-kitchzero-text">{review.newData.itemName}</p>
-                      <div className="flex items-center space-x-4 mt-2 text-sm text-kitchzero-text/70">
-                        <span>
-                          {review.newData.quantity} {review.newData.unit}
-                        </span>
-                        <span>
-                          {review.newData.value?.toLocaleString("en-LK", { style: "currency", currency: "LKR" })}
-                        </span>
+                  {/* Enhanced Quick Info Grid */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {review.newData && (
+                      <div className="relative overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100/50 p-5 rounded-xl border border-slate-200/60">
+                        <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-kitchzero-primary/10 to-kitchzero-secondary/10 rounded-full -translate-y-10 translate-x-10"></div>
+                        <div className="relative">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Package className="w-4 h-4 text-slate-600" />
+                            <p className="text-sm font-semibold text-slate-700">
+                              {review.action === "CREATE" ? "New Item Details" : "Item Information"}
+                            </p>
+                          </div>
+                          <h4 className="text-lg font-bold text-slate-900 mb-3">{review.newData.itemName}</h4>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="text-center p-3 bg-white rounded-lg border border-slate-200/60">
+                              <div className="text-lg font-bold text-slate-900">
+                                {review.newData.quantity} {review.newData.unit}
+                              </div>
+                              <div className="text-xs text-slate-500 font-medium">Quantity</div>
+                            </div>
+                            <div className="text-center p-3 bg-white rounded-lg border border-slate-200/60">
+                              <div className="text-lg font-bold text-slate-900">
+                                {review.newData.value?.toLocaleString("en-LK", {
+                                  style: "currency",
+                                  currency: "LKR",
+                                  minimumFractionDigits: 0,
+                                })}
+                              </div>
+                              <div className="text-xs text-slate-500 font-medium">Value</div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {review.reason && (
+                      <div className="relative overflow-hidden bg-gradient-to-br from-blue-50 to-blue-100/50 p-5 rounded-xl border border-blue-200/60">
+                        <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br from-blue-200/20 to-blue-300/20 rounded-full -translate-y-10 translate-x-10"></div>
+                        <div className="relative">
+                          <div className="flex items-center gap-2 mb-3">
+                            <MessageSquare className="w-4 h-4 text-blue-600" />
+                            <p className="text-sm font-semibold text-blue-800">Request Reason</p>
+                          </div>
+                          <p className="text-sm text-blue-700 italic leading-relaxed">"{review.reason}"</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Enhanced Expanded Details */}
+                  {expandedReview === review.id && (
+                    <div className="pt-6 border-t border-slate-200 space-y-4">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        {review.originalData && (
+                          <div className="bg-gradient-to-br from-orange-50 to-orange-100/50 p-5 rounded-xl border border-orange-200/60">
+                            <h5 className="font-semibold text-orange-800 mb-3 flex items-center gap-2">
+                              <Eye className="w-4 h-4" />
+                              Original Data
+                            </h5>
+                            <div className="space-y-2 text-sm">
+                              <div className="flex justify-between">
+                                <span className="text-orange-700">Item:</span>
+                                <span className="font-medium text-orange-900">{review.originalData.itemName}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-orange-700">Quantity:</span>
+                                <span className="font-medium text-orange-900">
+                                  {review.originalData.quantity} {review.originalData.unit}
+                                </span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-orange-700">Value:</span>
+                                <span className="font-medium text-orange-900">
+                                  {review.originalData.value?.toLocaleString("en-LK", {
+                                    style: "currency",
+                                    currency: "LKR",
+                                  })}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {review.reviewNotes && (
+                          <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 p-5 rounded-xl border border-purple-200/60">
+                            <h5 className="font-semibold text-purple-800 mb-3 flex items-center gap-2">
+                              <MessageSquare className="w-4 h-4" />
+                              Review Notes
+                            </h5>
+                            <p className="text-sm text-purple-700 italic">{review.reviewNotes}</p>
+                            {review.approver && (
+                              <div className="mt-3 pt-3 border-t border-purple-200 text-xs text-purple-600">
+                                Reviewed by: <span className="font-medium">{review.approver.username}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
 
-                  {review.reason && (
-                    <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-400">
-                      <p className="text-sm font-medium text-blue-800 mb-1">Request Reason</p>
-                      <p className="text-sm text-blue-700 italic">"{review.reason}"</p>
+                  {/* Enhanced Action Buttons */}
+                  {review.status === "PENDING" && (
+                    <div className="flex justify-end space-x-3 pt-6 border-t border-slate-200">
+                      <button
+                        onClick={() => handleReviewAction(review.id, "reject")}
+                        disabled={processingReview === review.id}
+                        className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl hover:from-red-600 hover:to-red-700 transition-all duration-200 font-semibold text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                      >
+                        <XCircle className="w-4 h-4" />
+                        <span>{processingReview === review.id ? "Processing..." : "Reject"}</span>
+                      </button>
+                      <button
+                        onClick={() => handleReviewAction(review.id, "approve")}
+                        disabled={processingReview === review.id}
+                        className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-xl hover:from-emerald-600 hover:to-emerald-700 transition-all duration-200 font-semibold text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        <span>{processingReview === review.id ? "Processing..." : "Approve"}</span>
+                      </button>
                     </div>
                   )}
                 </div>
-
-                {/* Actions */}
-                {review.status === "PENDING" && (
-                  <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200">
-                    <button
-                      onClick={() => handleReviewAction(review.id, "reject")}
-                      disabled={processingReview === review.id}
-                      className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center space-x-2"
-                    >
-                      <XCircle className="w-4 h-4" />
-                      <span>{processingReview === review.id ? "Processing..." : "Reject"}</span>
-                    </button>
-                    <button
-                      onClick={() => handleReviewAction(review.id, "approve")}
-                      disabled={processingReview === review.id}
-                      className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center space-x-2"
-                    >
-                      <CheckCircle className="w-4 h-4" />
-                      <span>{processingReview === review.id ? "Processing..." : "Approve"}</span>
-                    </button>
-                  </div>
-                )}
               </div>
+            ))
+          ) : (
+            <div className="text-center py-16 px-6">
+              <div className="w-20 h-20 bg-gradient-to-br from-slate-100 to-slate-200 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                <FileText className="w-10 h-10 text-slate-400" />
+              </div>
+              <h3 className="text-xl font-semibold text-slate-900 mb-3">No reviews found</h3>
+              <p className="text-slate-500 mb-8 max-w-md mx-auto">
+                {searchTerm || actionFilter
+                  ? "No reviews match your current filters. Try adjusting your search criteria."
+                  : "No reviews match the current criteria. Check back later for new requests."}
+              </p>
             </div>
-          ))
-        ) : (
-          <div className="text-center py-12">
-            <FileText className="w-16 h-16 text-kitchzero-text/30 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-kitchzero-text mb-2">No reviews found</h3>
-            <p className="text-kitchzero-text/70">
-              {searchTerm || actionFilter ? "Try adjusting your filters" : "No reviews match the current criteria"}
-            </p>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )
