@@ -4,6 +4,8 @@ import type React from "react"
 
 import { useEffect, useState } from "react"
 import { useAuth } from "@/components/auth-provider"
+import DeleteConfirmationModal from "@/components/ui/delete-confirmation-modal"
+import { ToastContainer, useToast } from "@/components/ui/toast-notification"
 import type { WasteLog, Branch } from "@/lib/types"
 import {
   Plus,
@@ -25,6 +27,12 @@ import {
   TrendingUp,
   TrendingDown,
   BarChart3,
+  Filter,
+  SortAsc,
+  SortDesc,
+  RefreshCw,
+  Bell,
+  X,
 } from "lucide-react"
 
 interface WasteLogWithBranch extends WasteLog {
@@ -41,10 +49,17 @@ interface WasteLogReview {
     username: string
     role: string
   }
+  wasteLog?: {
+    itemName: string
+    branch: {
+      name: string
+    }
+  }
 }
 
 export default function WastePage() {
   const { user } = useAuth()
+  const { toasts, addToast, removeToast } = useToast()
   const [wasteLogs, setWasteLogs] = useState<WasteLogWithBranch[]>([])
   const [branches, setBranches] = useState<Branch[]>([])
   const [reviews, setReviews] = useState<WasteLogReview[]>([])
@@ -58,6 +73,16 @@ export default function WastePage() {
   const [filterBranch, setFilterBranch] = useState("")
   const [sortBy, setSortBy] = useState("createdAt")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
+  const [showFilters, setShowFilters] = useState(false)
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean
+    wasteLog: WasteLogWithBranch | null
+    isLoading: boolean
+  }>({
+    isOpen: false,
+    wasteLog: null,
+    isLoading: false,
+  })
   const [formData, setFormData] = useState({
     itemName: "",
     quantity: "",
@@ -77,14 +102,32 @@ export default function WastePage() {
   }, [user])
 
   const fetchWasteLogs = async () => {
+    setLoading(true)
     try {
-      const response = await fetch("/api/waste-logs")
+      const response = await fetch("/api/waste-logs", {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      })
       if (response.ok) {
         const data = await response.json()
         setWasteLogs(data.wasteLogs)
+        addToast({
+          type: "success",
+          title: "Data Refreshed",
+          message: "Waste logs have been refreshed successfully.",
+        })
+      } else {
+        throw new Error('Failed to fetch waste logs')
       }
     } catch (error) {
       console.error("Failed to fetch waste logs:", error)
+      addToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to refresh waste logs. Please try again.",
+      })
     } finally {
       setLoading(false)
     }
@@ -126,7 +169,17 @@ export default function WastePage() {
       if (response.ok) {
         const result = await response.json()
         if (result.requiresApproval) {
-          alert("Waste log submitted for approval!")
+          addToast({
+            type: "info",
+            title: "Submitted for Approval",
+            message: "Your waste log has been submitted and is awaiting super admin approval.",
+          })
+        } else {
+          addToast({
+            type: "success",
+            title: "Waste Log Created",
+            message: "Waste log has been successfully created.",
+          })
         }
         setShowForm(false)
         resetForm()
@@ -137,6 +190,11 @@ export default function WastePage() {
       }
     } catch (error) {
       console.error("Failed to create waste log:", error)
+      addToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to create waste log. Please try again.",
+      })
     }
   }
 
@@ -154,7 +212,17 @@ export default function WastePage() {
       if (response.ok) {
         const result = await response.json()
         if (result.requiresApproval) {
-          alert("Update request submitted for approval!")
+          addToast({
+            type: "info",
+            title: "Update Submitted",
+            message: "Your update request has been submitted for super admin approval.",
+          })
+        } else {
+          addToast({
+            type: "success",
+            title: "Waste Log Updated",
+            message: "Waste log has been successfully updated.",
+          })
         }
         setEditingLog(null)
         resetForm()
@@ -165,15 +233,21 @@ export default function WastePage() {
       }
     } catch (error) {
       console.error("Failed to update waste log:", error)
+      addToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to update waste log. Please try again.",
+      })
     }
   }
 
-  const handleDelete = async (wasteLog: WasteLogWithBranch) => {
-    const reason = prompt("Please provide a reason for deletion:")
-    if (!reason) return
+  const handleDelete = async (reason: string) => {
+    if (!deleteModal.wasteLog) return
+
+    setDeleteModal((prev) => ({ ...prev, isLoading: true }))
 
     try {
-      const response = await fetch(`/api/waste-logs/${wasteLog.id}`, {
+      const response = await fetch(`/api/waste-logs/${deleteModal.wasteLog.id}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason }),
@@ -182,8 +256,19 @@ export default function WastePage() {
       if (response.ok) {
         const result = await response.json()
         if (result.requiresApproval) {
-          alert("Delete request submitted for approval!")
+          addToast({
+            type: "info",
+            title: "Delete Request Submitted",
+            message: "Your delete request has been submitted for super admin approval.",
+          })
+        } else {
+          addToast({
+            type: "success",
+            title: "Waste Log Deleted",
+            message: "Waste log has been successfully deleted.",
+          })
         }
+        setDeleteModal({ isOpen: false, wasteLog: null, isLoading: false })
         fetchWasteLogs()
         if (user?.role === "SUPER_ADMIN") {
           fetchReviews()
@@ -191,11 +276,18 @@ export default function WastePage() {
       }
     } catch (error) {
       console.error("Failed to delete waste log:", error)
+      addToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to delete waste log. Please try again.",
+      })
+      setDeleteModal((prev) => ({ ...prev, isLoading: false }))
     }
   }
 
   const handleReviewAction = async (reviewId: string, action: "approve" | "reject") => {
     const reviewNotes = prompt(`Please provide notes for ${action}ing this request:`)
+    if (!reviewNotes) return
 
     try {
       const response = await fetch(`/api/reviews/${reviewId}`, {
@@ -205,11 +297,21 @@ export default function WastePage() {
       })
 
       if (response.ok) {
+        addToast({
+          type: "success",
+          title: `Request ${action === "approve" ? "Approved" : "Rejected"}`,
+          message: `The request has been successfully ${action}d.`,
+        })
         fetchReviews()
         fetchWasteLogs()
       }
     } catch (error) {
       console.error("Failed to process review:", error)
+      addToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to process review. Please try again.",
+      })
     }
   }
 
@@ -237,6 +339,14 @@ export default function WastePage() {
       photo: wasteLog.photo || "",
     })
     setShowForm(true)
+  }
+
+  const openDeleteModal = (wasteLog: WasteLogWithBranch) => {
+    setDeleteModal({
+      isOpen: true,
+      wasteLog,
+      isLoading: false,
+    })
   }
 
   const formatReason = (reason: string) => {
@@ -312,12 +422,15 @@ export default function WastePage() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-kitchzero-primary"></div>
+        <p className="ml-4 text-kitchzero-text">Loading waste management data...</p>
       </div>
     )
   }
 
   return (
     <div className="space-y-8">
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
+
       {/* Header Section */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
         <div>
@@ -325,15 +438,35 @@ export default function WastePage() {
           <p className="text-kitchzero-text/70 mt-2">Track, analyze, and reduce food waste across your operations</p>
         </div>
         <div className="mt-4 lg:mt-0 flex items-center space-x-4">
+          <button
+            onClick={() => {
+              fetchWasteLogs()
+              if (user?.role === "SUPER_ADMIN") {
+                fetchBranches()
+                fetchReviews()
+              }
+            }}
+            disabled={loading}
+            className={`flex items-center space-x-2 px-4 py-2 border border-kitchzero-border rounded-lg transition-colors ${
+              loading 
+                ? 'opacity-50 cursor-not-allowed' 
+                : 'hover:bg-gray-50'
+            }`}
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <span>{loading ? 'Refreshing...' : 'Refresh'}</span>
+          </button>
+
           {user?.role === "SUPER_ADMIN" && reviews.length > 0 && (
             <button onClick={() => setShowReviews(true)} className="btn-secondary flex items-center space-x-2 relative">
-              <FileText className="w-4 h-4" />
+              <Bell className="w-4 h-4" />
               <span>Reviews</span>
-              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+              <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center animate-pulse">
                 {reviews.length}
               </span>
             </button>
           )}
+
           <button onClick={() => setShowForm(true)} className="btn-primary flex items-center space-x-2">
             <Plus className="w-4 h-4" />
             <span>Log Waste</span>
@@ -341,31 +474,37 @@ export default function WastePage() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="card">
+      {/* Enhanced Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="card group hover:shadow-lg transition-all duration-200 border-l-4 border-l-kitchzero-primary">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-kitchzero-text/70">Total Entries</p>
               <p className="text-2xl font-bold text-kitchzero-text">{wasteLogs.length}</p>
+              <p className="text-xs text-kitchzero-text/50 mt-1">All time records</p>
             </div>
-            <FileText className="w-8 h-8 text-kitchzero-primary" />
+            <div className="p-3 bg-gradient-to-br from-kitchzero-primary/10 to-kitchzero-primary/20 rounded-xl group-hover:scale-110 transition-transform">
+              <FileText className="w-6 h-6 text-kitchzero-primary" />
+            </div>
           </div>
         </div>
 
-        <div className="card">
+        <div className="card group hover:shadow-lg transition-all duration-200 border-l-4 border-l-kitchzero-accent">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-kitchzero-text/70">Total Waste</p>
               <p className="text-2xl font-bold text-kitchzero-text">
                 {wasteLogs.reduce((sum, log) => sum + log.quantity, 0).toFixed(1)} kg
               </p>
+              <p className="text-xs text-kitchzero-text/50 mt-1">Weight accumulated</p>
             </div>
-            <Trash2 className="w-8 h-8 text-kitchzero-accent" />
+            <div className="p-3 bg-gradient-to-br from-kitchzero-accent/10 to-kitchzero-accent/20 rounded-xl group-hover:scale-110 transition-transform">
+              <Trash2 className="w-6 h-6 text-kitchzero-accent" />
+            </div>
           </div>
         </div>
 
-        <div className="card">
+        <div className="card group hover:shadow-lg transition-all duration-200 border-l-4 border-l-red-500">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-kitchzero-text/70">Total Value</p>
@@ -378,12 +517,15 @@ export default function WastePage() {
                     minimumFractionDigits: 0,
                   })}
               </p>
+              <p className="text-xs text-kitchzero-text/50 mt-1">Financial impact</p>
             </div>
-            <DollarSign className="w-8 h-8 text-red-600" />
+            <div className="p-3 bg-gradient-to-br from-red-100 to-red-200 rounded-xl group-hover:scale-110 transition-transform">
+              <DollarSign className="w-6 h-6 text-red-600" />
+            </div>
           </div>
         </div>
 
-        <div className="card">
+        <div className="card group hover:shadow-lg transition-all duration-200 border-l-4 border-l-kitchzero-success">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-kitchzero-text/70">Avg per Entry</p>
@@ -396,93 +538,169 @@ export default function WastePage() {
                     })
                   : "LKR 0"}
               </p>
+              <p className="text-xs text-kitchzero-text/50 mt-1">Per waste entry</p>
             </div>
-            <BarChart3 className="w-8 h-8 text-kitchzero-success" />
+            <div className="p-3 bg-gradient-to-br from-kitchzero-success/10 to-kitchzero-success/20 rounded-xl group-hover:scale-110 transition-transform">
+              <BarChart3 className="w-6 h-6 text-kitchzero-success" />
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Filters and Search */}
+      {/* Enhanced Filters and Search */}
       <div className="card">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
-          <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <input
-                type="text"
-                placeholder="Search items..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 input w-full sm:w-64"
-              />
+        <div className="flex flex-col space-y-4">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0">
+            <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <input
+                  type="text"
+                  placeholder="Search items..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 input w-full sm:w-64"
+                />
+              </div>
+
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`flex items-center space-x-2 px-4 py-2 border rounded-lg transition-colors ${
+                  showFilters
+                    ? "bg-kitchzero-primary text-white border-kitchzero-primary"
+                    : "border-kitchzero-border hover:bg-gray-50"
+                }`}
+              >
+                <Filter className="w-4 h-4" />
+                <span>Filters</span>
+                {(filterReason || filterBranch) && (
+                  <span className="bg-red-500 text-white text-xs rounded-full w-2 h-2"></span>
+                )}
+              </button>
             </div>
 
-            <select value={filterReason} onChange={(e) => setFilterReason(e.target.value)} className="select">
-              <option value="">All Reasons</option>
-              <option value="SPOILAGE">Spoilage</option>
-              <option value="OVERPRODUCTION">Overproduction</option>
-              <option value="PLATE_WASTE">Plate Waste</option>
-              <option value="BUFFET_LEFTOVER">Buffet Leftover</option>
-            </select>
-
-            {user?.role === "SUPER_ADMIN" && (
-              <select value={filterBranch} onChange={(e) => setFilterBranch(e.target.value)} className="select">
-                <option value="">All Branches</option>
-                {branches.map((branch) => (
-                  <option key={branch.id} value={branch.id}>
-                    {branch.name}
-                  </option>
-                ))}
+            <div className="flex items-center space-x-4">
+              <select
+                value={`${sortBy}-${sortOrder}`}
+                onChange={(e) => {
+                  const [field, order] = e.target.value.split("-")
+                  setSortBy(field)
+                  setSortOrder(order as "asc" | "desc")
+                }}
+                className="select"
+              >
+                <option value="createdAt-desc">Newest First</option>
+                <option value="createdAt-asc">Oldest First</option>
+                <option value="value-desc">Highest Value</option>
+                <option value="value-asc">Lowest Value</option>
+                <option value="quantity-desc">Most Quantity</option>
+                <option value="quantity-asc">Least Quantity</option>
               </select>
-            )}
+
+              <button className="btn-secondary flex items-center space-x-2">
+                <Download className="w-4 h-4" />
+                <span>Export</span>
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center space-x-4">
-            <select
-              value={`${sortBy}-${sortOrder}`}
-              onChange={(e) => {
-                const [field, order] = e.target.value.split("-")
-                setSortBy(field)
-                setSortOrder(order as "asc" | "desc")
-              }}
-              className="select"
-            >
-              <option value="createdAt-desc">Newest First</option>
-              <option value="createdAt-asc">Oldest First</option>
-              <option value="value-desc">Highest Value</option>
-              <option value="value-asc">Lowest Value</option>
-              <option value="quantity-desc">Most Quantity</option>
-              <option value="quantity-asc">Least Quantity</option>
-            </select>
+          {showFilters && (
+            <div className="flex flex-col sm:flex-row sm:items-center space-y-4 sm:space-y-0 sm:space-x-4 p-4 bg-gray-50 rounded-lg border">
+              <select value={filterReason} onChange={(e) => setFilterReason(e.target.value)} className="select">
+                <option value="">All Reasons</option>
+                <option value="SPOILAGE">Spoilage</option>
+                <option value="OVERPRODUCTION">Overproduction</option>
+                <option value="PLATE_WASTE">Plate Waste</option>
+                <option value="BUFFET_LEFTOVER">Buffet Leftover</option>
+              </select>
 
-            <button className="btn-secondary flex items-center space-x-2">
-              <Download className="w-4 h-4" />
-              <span>Export</span>
-            </button>
-          </div>
+              {user?.role === "SUPER_ADMIN" && (
+                <select value={filterBranch} onChange={(e) => setFilterBranch(e.target.value)} className="select">
+                  <option value="">All Branches</option>
+                  {branches.map((branch) => (
+                    <option key={branch.id} value={branch.id}>
+                      {branch.name}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {(filterReason || filterBranch) && (
+                <button
+                  onClick={() => {
+                    setFilterReason("")
+                    setFilterBranch("")
+                  }}
+                  className="flex items-center space-x-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                  <span>Clear Filters</span>
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Waste Logs Table */}
+      {/* Enhanced Waste Logs Table */}
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50">
+            <thead className="bg-gradient-to-r from-gray-50 to-gray-100">
               <tr>
                 <th className="text-left py-4 px-6 font-semibold text-kitchzero-text">Item</th>
-                <th className="text-left py-4 px-6 font-semibold text-kitchzero-text">Quantity</th>
-                <th className="text-left py-4 px-6 font-semibold text-kitchzero-text">Value</th>
+                <th className="text-left py-4 px-6 font-semibold text-kitchzero-text">
+                  <button
+                    onClick={() => {
+                      setSortBy("quantity")
+                      setSortOrder(sortBy === "quantity" && sortOrder === "desc" ? "asc" : "desc")
+                    }}
+                    className="flex items-center space-x-1 hover:text-kitchzero-primary"
+                  >
+                    <span>Quantity</span>
+                    {sortBy === "quantity" &&
+                      (sortOrder === "desc" ? <SortDesc className="w-4 h-4" /> : <SortAsc className="w-4 h-4" />)}
+                  </button>
+                </th>
+                <th className="text-left py-4 px-6 font-semibold text-kitchzero-text">
+                  <button
+                    onClick={() => {
+                      setSortBy("value")
+                      setSortOrder(sortBy === "value" && sortOrder === "desc" ? "asc" : "desc")
+                    }}
+                    className="flex items-center space-x-1 hover:text-kitchzero-primary"
+                  >
+                    <span>Value</span>
+                    {sortBy === "value" &&
+                      (sortOrder === "desc" ? <SortDesc className="w-4 h-4" /> : <SortAsc className="w-4 h-4" />)}
+                  </button>
+                </th>
                 <th className="text-left py-4 px-6 font-semibold text-kitchzero-text">Reason</th>
                 {user?.role === "SUPER_ADMIN" && (
                   <th className="text-left py-4 px-6 font-semibold text-kitchzero-text">Branch</th>
                 )}
-                <th className="text-left py-4 px-6 font-semibold text-kitchzero-text">Date</th>
+                <th className="text-left py-4 px-6 font-semibold text-kitchzero-text">
+                  <button
+                    onClick={() => {
+                      setSortBy("createdAt")
+                      setSortOrder(sortBy === "createdAt" && sortOrder === "desc" ? "asc" : "desc")
+                    }}
+                    className="flex items-center space-x-1 hover:text-kitchzero-primary"
+                  >
+                    <span>Date</span>
+                    {sortBy === "createdAt" &&
+                      (sortOrder === "desc" ? <SortDesc className="w-4 h-4" /> : <SortAsc className="w-4 h-4" />)}
+                  </button>
+                </th>
                 <th className="text-right py-4 px-6 font-semibold text-kitchzero-text">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {filteredWasteLogs.map((log) => (
-                <tr key={log.id} className="hover:bg-gray-50 transition-colors">
+              {filteredWasteLogs.map((log, index) => (
+                <tr
+                  key={log.id}
+                  className={`hover:bg-gray-50 transition-colors ${index % 2 === 0 ? "bg-white" : "bg-gray-25"}`}
+                >
                   <td className="py-4 px-6">
                     <div className="flex items-center space-x-3">
                       {log.photo && (
@@ -547,7 +765,7 @@ export default function WastePage() {
                         <Edit className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => handleDelete(log)}
+                        onClick={() => openDeleteModal(log)}
                         className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         title="Delete"
                       >
@@ -578,6 +796,18 @@ export default function WastePage() {
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={deleteModal.isOpen}
+        onClose={() => setDeleteModal({ isOpen: false, wasteLog: null, isLoading: false })}
+        onConfirm={handleDelete}
+        title="Delete Waste Entry"
+        description="Are you sure you want to delete this waste entry? This action cannot be undone."
+        itemName={deleteModal.wasteLog?.itemName}
+        requireReason={user?.role === "BRANCH_ADMIN"}
+        isLoading={deleteModal.isLoading}
+      />
 
       {/* Add/Edit Form Modal */}
       {showForm && (
@@ -791,60 +1021,96 @@ export default function WastePage() {
         </div>
       )}
 
-      {/* Reviews Modal */}
+      {/* Enhanced Reviews Modal */}
       {showReviews && user?.role === "SUPER_ADMIN" && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
-              <h2 className="text-2xl font-bold text-kitchzero-text">Pending Reviews</h2>
-              <p className="text-kitchzero-text/70 mt-1">
-                Review and approve changes requested by branch administrators
-              </p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-bold text-kitchzero-text">Pending Reviews</h2>
+                  <p className="text-kitchzero-text/70 mt-1">
+                    Review and approve changes requested by branch administrators
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowReviews(false)}
+                  className="text-gray-500 hover:text-gray-700 transition-colors"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
             </div>
 
             <div className="p-6">
               {reviews.length > 0 ? (
                 <div className="space-y-4">
                   {reviews.map((review) => (
-                    <div key={review.id} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex items-start justify-between">
+                    <div
+                      key={review.id}
+                      className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow"
+                    >
+                      <div className="flex items-start justify-between mb-4">
                         <div className="flex-1">
-                          <div className="flex items-center space-x-3 mb-2">
-                            <span className="font-semibold text-kitchzero-text">{review.action} Request</span>
+                          <div className="flex items-center space-x-3 mb-3">
+                            <span
+                              className={`px-3 py-1 rounded-full text-sm font-medium border ${
+                                review.action === "CREATE"
+                                  ? "text-green-600 bg-green-50 border-green-200"
+                                  : review.action === "UPDATE"
+                                    ? "text-blue-600 bg-blue-50 border-blue-200"
+                                    : "text-red-600 bg-red-50 border-red-200"
+                              }`}
+                            >
+                              {review.action} Request
+                            </span>
                             {getStatusBadge(review.status)}
                           </div>
 
-                          <div className="flex items-center space-x-4 text-sm text-kitchzero-text/70 mb-3">
-                            <div className="flex items-center space-x-1">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                            <div className="flex items-center space-x-2 text-sm text-kitchzero-text/70">
                               <User className="w-4 h-4" />
-                              <span>{review.creator.username}</span>
+                              <span className="font-medium">{review.creator.username}</span>
+                              <span className="text-kitchzero-text/50">({review.creator.role})</span>
                             </div>
-                            <div className="flex items-center space-x-1">
+                            <div className="flex items-center space-x-2 text-sm text-kitchzero-text/70">
                               <Calendar className="w-4 h-4" />
                               <span>{new Date(review.createdAt).toLocaleDateString()}</span>
                             </div>
                           </div>
 
+                          {review.wasteLog && (
+                            <div className="bg-gray-50 p-3 rounded-lg mb-3">
+                              <p className="text-sm font-medium text-kitchzero-text">
+                                Item: <span className="font-semibold">{review.wasteLog.itemName}</span>
+                              </p>
+                              <p className="text-sm text-kitchzero-text/70">Branch: {review.wasteLog.branch.name}</p>
+                            </div>
+                          )}
+
                           {review.reason && (
-                            <p className="text-sm text-kitchzero-text/70 mb-3">
-                              <strong>Reason:</strong> {review.reason}
-                            </p>
+                            <div className="bg-blue-50 border-l-4 border-blue-400 p-3 mb-3">
+                              <p className="text-sm font-medium text-blue-800">Reason:</p>
+                              <p className="text-sm text-blue-700 italic">"{review.reason}"</p>
+                            </div>
                           )}
                         </div>
 
                         {review.status === "PENDING" && (
-                          <div className="flex space-x-2">
+                          <div className="flex space-x-3 ml-4">
                             <button
                               onClick={() => handleReviewAction(review.id, "approve")}
-                              className="btn-primary text-sm px-4 py-2"
+                              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2"
                             >
-                              Approve
+                              <CheckCircle className="w-4 h-4" />
+                              <span>Approve</span>
                             </button>
                             <button
                               onClick={() => handleReviewAction(review.id, "reject")}
-                              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition-colors text-sm"
+                              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center space-x-2"
                             >
-                              Reject
+                              <XCircle className="w-4 h-4" />
+                              <span>Reject</span>
                             </button>
                           </div>
                         )}
@@ -861,14 +1127,20 @@ export default function WastePage() {
               )}
             </div>
 
-            <div className="p-6 border-t border-gray-200 flex justify-end">
-              <button onClick={() => setShowReviews(false)} className="btn-primary">
-                Close
-              </button>
+            <div className="p-6 border-t border-gray-200 bg-gray-50 rounded-b-xl">
+              <div className="flex items-center justify-between">
+                <p className="text-sm text-kitchzero-text/70">
+                  {reviews.length} pending review{reviews.length !== 1 ? "s" : ""}
+                </p>
+                <button onClick={() => setShowReviews(false)} className="btn-primary">
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
-      )}
+      )}\
     </div>
+
   )
 }

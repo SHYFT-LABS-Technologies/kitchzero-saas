@@ -22,6 +22,7 @@ import {
   Zap,
   Leaf,
   Minus,
+  RefreshCw,
 } from "lucide-react"
 
 interface AnalyticsData {
@@ -64,7 +65,9 @@ export default function DashboardPage() {
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [timeRange, setTimeRange] = useState("30d")
+  const [timeRange, setTimeRange] = useState("today")
+  const [refreshing, setRefreshing] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   useEffect(() => {
     if (user) {
@@ -87,6 +90,7 @@ export default function DashboardPage() {
         const data = await response.json()
         console.log("📊 Analytics data received:", data)
         setAnalytics(data.analytics)
+        setLastUpdated(new Date())
       } else {
         const errorData = await response.json()
         console.error("❌ Analytics API error:", errorData)
@@ -98,6 +102,12 @@ export default function DashboardPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    await fetchAnalytics()
+    setRefreshing(false)
   }
 
   const formatCurrency = (amount: number) => {
@@ -125,6 +135,21 @@ export default function DashboardPage() {
     if (score >= 80) return "from-green-500 to-green-600"
     if (score >= 60) return "from-yellow-500 to-yellow-600"
     return "from-red-500 to-red-600"
+  }
+
+  const getTimeRangeLabel = (range: string) => {
+    switch (range) {
+      case "today":
+        return "Today"
+      case "7d":
+        return "Last 7 days"
+      case "30d":
+        return "Last 30 days"
+      case "90d":
+        return "Last 90 days"
+      default:
+        return "Today"
+    }
   }
 
   if (loading) {
@@ -168,20 +193,33 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8">
-      {/* Debug Info - Remove in production */}
-
       {/* Header Section */}
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-kitchzero-text">Welcome back, {user?.username}! 👋</h1>
-          <p className="text-kitchzero-text/70 mt-2">Here's what's happening with your food waste management today.</p>
+          <p className="text-kitchzero-text/70 mt-2">
+            Here's your food waste management overview for {getTimeRangeLabel(timeRange).toLowerCase()}.
+          </p>
         </div>
         <div className="mt-4 lg:mt-0 flex items-center space-x-4">
-          <select value={timeRange} onChange={(e) => setTimeRange(e.target.value)} className="select text-sm">
+          <select
+            value={timeRange}
+            onChange={(e) => setTimeRange(e.target.value)}
+            className="select text-sm bg-white border-2 border-kitchzero-border focus:border-kitchzero-primary"
+          >
+            <option value="today">Today</option>
             <option value="7d">Last 7 days</option>
             <option value="30d">Last 30 days</option>
             <option value="90d">Last 90 days</option>
           </select>
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="flex items-center space-x-2 px-4 py-2 border border-kitchzero-border rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
+            <span>Refresh</span>
+          </button>
           <div className="flex items-center space-x-2 text-sm text-kitchzero-text/70">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
             <span>Live data</span>
@@ -192,79 +230,79 @@ export default function DashboardPage() {
       {/* Key Metrics Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Total Waste */}
-        <div className="card group hover:shadow-lg transition-all duration-200">
+        <div className="card group hover:shadow-xl transition-all duration-300 border-l-4 border-l-kitchzero-accent">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-kitchzero-text/70">Total Waste</p>
-              <p className="text-2xl font-bold text-kitchzero-text">{analytics.totalWasteKg} kg</p>
-              <div className="flex items-center space-x-1 mt-1">
+              <p className="text-3xl font-bold text-kitchzero-text">{analytics.totalWasteKg} kg</p>
+              <div className="flex items-center space-x-1 mt-2">
                 {getChangeIcon(analytics.wasteChange)}
                 <span className={`text-sm font-medium ${getChangeColor(analytics.wasteChange, true)}`}>
                   {analytics.wasteChange > 0 ? "+" : ""}
                   {analytics.wasteChange}%
                 </span>
-                <span className="text-xs text-kitchzero-text/50">vs last period</span>
+                <span className="text-xs text-kitchzero-text/50">vs previous period</span>
               </div>
             </div>
-            <div className="p-3 bg-gradient-to-br from-kitchzero-accent/10 to-kitchzero-accent/20 rounded-xl group-hover:scale-110 transition-transform">
-              <Trash2 className="w-6 h-6 text-kitchzero-accent" />
+            <div className="p-4 bg-gradient-to-br from-kitchzero-accent/10 to-kitchzero-accent/20 rounded-xl group-hover:scale-110 transition-transform">
+              <Trash2 className="w-8 h-8 text-kitchzero-accent" />
             </div>
           </div>
         </div>
 
         {/* Cost Impact */}
-        <div className="card group hover:shadow-lg transition-all duration-200">
+        <div className="card group hover:shadow-xl transition-all duration-300 border-l-4 border-l-red-500">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-kitchzero-text/70">Cost Impact</p>
-              <p className="text-2xl font-bold text-kitchzero-text">{formatCurrency(analytics.totalWasteLKR)}</p>
-              <div className="flex items-center space-x-1 mt-1">
+              <p className="text-3xl font-bold text-kitchzero-text">{formatCurrency(analytics.totalWasteLKR)}</p>
+              <div className="flex items-center space-x-1 mt-2">
                 {getChangeIcon(analytics.costChange)}
                 <span className={`text-sm font-medium ${getChangeColor(analytics.costChange, true)}`}>
                   {analytics.costChange > 0 ? "+" : ""}
                   {analytics.costChange}%
                 </span>
-                <span className="text-xs text-kitchzero-text/50">vs last period</span>
+                <span className="text-xs text-kitchzero-text/50">vs previous period</span>
               </div>
             </div>
-            <div className="p-3 bg-gradient-to-br from-red-100 to-red-200 rounded-xl group-hover:scale-110 transition-transform">
-              <DollarSign className="w-6 h-6 text-red-600" />
+            <div className="p-4 bg-gradient-to-br from-red-100 to-red-200 rounded-xl group-hover:scale-110 transition-transform">
+              <DollarSign className="w-8 h-8 text-red-600" />
             </div>
           </div>
         </div>
 
         {/* Efficiency Score */}
-        <div className="card group hover:shadow-lg transition-all duration-200">
+        <div className="card group hover:shadow-xl transition-all duration-300 border-l-4 border-l-kitchzero-success">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-kitchzero-text/70">Efficiency Score</p>
-              <p className="text-2xl font-bold text-kitchzero-text">{analytics.efficiencyScore}%</p>
-              <div className="flex items-center space-x-1 mt-1">
+              <p className="text-3xl font-bold text-kitchzero-text">{analytics.efficiencyScore}%</p>
+              <div className="flex items-center space-x-1 mt-2">
                 <ArrowUpRight className="w-4 h-4 text-green-600" />
                 <span className="text-sm text-green-600 font-medium">Optimized</span>
                 <span className="text-xs text-kitchzero-text/50">performance</span>
               </div>
             </div>
-            <div className="p-3 bg-gradient-to-br from-kitchzero-success/10 to-kitchzero-success/20 rounded-xl group-hover:scale-110 transition-transform">
-              <Target className="w-6 h-6 text-kitchzero-success" />
+            <div className="p-4 bg-gradient-to-br from-kitchzero-success/10 to-kitchzero-success/20 rounded-xl group-hover:scale-110 transition-transform">
+              <Target className="w-8 h-8 text-kitchzero-success" />
             </div>
           </div>
         </div>
 
         {/* Cost Savings */}
-        <div className="card group hover:shadow-lg transition-all duration-200">
+        <div className="card group hover:shadow-xl transition-all duration-300 border-l-4 border-l-green-500">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-kitchzero-text/70">Estimated Savings</p>
-              <p className="text-2xl font-bold text-kitchzero-text">{formatCurrency(analytics.costSavings)}</p>
-              <div className="flex items-center space-x-1 mt-1">
+              <p className="text-3xl font-bold text-kitchzero-text">{formatCurrency(analytics.costSavings)}</p>
+              <div className="flex items-center space-x-1 mt-2">
                 <Leaf className="w-4 h-4 text-green-600" />
                 <span className="text-sm text-green-600 font-medium">Sustainable</span>
                 <span className="text-xs text-kitchzero-text/50">practices</span>
               </div>
             </div>
-            <div className="p-3 bg-gradient-to-br from-green-100 to-green-200 rounded-xl group-hover:scale-110 transition-transform">
-              <Leaf className="w-6 h-6 text-green-600" />
+            <div className="p-4 bg-gradient-to-br from-green-100 to-green-200 rounded-xl group-hover:scale-110 transition-transform">
+              <Leaf className="w-8 h-8 text-green-600" />
             </div>
           </div>
         </div>
@@ -274,45 +312,46 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {user?.role === "SUPER_ADMIN" && (
           <>
-            <div className="card">
+            <div className="card hover:shadow-lg transition-all duration-200">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-kitchzero-text/70">Active Branches</p>
-                  <p className="text-xl font-bold text-kitchzero-text">{analytics.totalBranches}</p>
+                  <p className="text-2xl font-bold text-kitchzero-text">{analytics.totalBranches}</p>
                 </div>
-                <Building2 className="w-5 h-5 text-kitchzero-primary" />
+                <Building2 className="w-6 h-6 text-kitchzero-primary" />
               </div>
             </div>
 
-            <div className="card">
+            <div className="card hover:shadow-lg transition-all duration-200">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-kitchzero-text/70">Total Users</p>
-                  <p className="text-xl font-bold text-kitchzero-text">{analytics.totalUsers}</p>
+                  <p className="text-2xl font-bold text-kitchzero-text">{analytics.totalUsers}</p>
                 </div>
-                <Users className="w-5 h-5 text-kitchzero-secondary" />
+                <Users className="w-6 h-6 text-kitchzero-secondary" />
               </div>
             </div>
           </>
         )}
 
-        <div className="card">
+        <div className="card hover:shadow-lg transition-all duration-200">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-kitchzero-text/70">Inventory Items</p>
-              <p className="text-xl font-bold text-kitchzero-text">{analytics.totalInventoryItems}</p>
+              <p className="text-2xl font-bold text-kitchzero-text">{analytics.totalInventoryItems}</p>
             </div>
-            <Package className="w-5 h-5 text-kitchzero-primary" />
+            <Package className="w-6 h-6 text-kitchzero-primary" />
           </div>
         </div>
 
-        <div className="card">
+        <div className="card hover:shadow-lg transition-all duration-200">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-kitchzero-text/70">Expiring Soon</p>
-              <p className="text-xl font-bold text-kitchzero-text">{analytics.expiringItems}</p>
+              <p className="text-2xl font-bold text-kitchzero-text">{analytics.expiringItems}</p>
+              {analytics.expiringItems > 0 && <p className="text-xs text-orange-600 mt-1">Requires attention</p>}
             </div>
-            <AlertTriangle className="w-5 h-5 text-kitchzero-warning" />
+            <AlertTriangle className={`w-6 h-6 ${analytics.expiringItems > 0 ? "text-orange-500" : "text-gray-400"}`} />
           </div>
         </div>
       </div>
@@ -325,32 +364,34 @@ export default function DashboardPage() {
             <h2 className="text-xl font-semibold text-kitchzero-text">Waste Trend Analysis</h2>
             <div className="flex items-center space-x-2">
               <BarChart3 className="w-5 h-5 text-kitchzero-primary" />
-              <span className="text-sm text-kitchzero-text/70">
-                {timeRange === "7d" ? "Last 7 days" : timeRange === "30d" ? "Last 30 days" : "Last 90 days"}
-              </span>
+              <span className="text-sm text-kitchzero-text/70">{getTimeRangeLabel(timeRange)}</span>
             </div>
           </div>
 
           {analytics.wasteOverTime.length ? (
             <div className="space-y-4">
-              <div className="h-64 flex items-end space-x-2">
-                {analytics.wasteOverTime.slice(-14).map((data, index) => {
-                  const maxValue = Math.max(...analytics.wasteOverTime.map((d) => d.value))
-                  const height = maxValue > 0 ? Math.max((data.value / maxValue) * 200, 4) : 4
+              <div className="h-64 flex items-end space-x-1 overflow-x-auto">
+                {analytics.wasteOverTime.map((data, index) => {
+                  const maxValue = Math.max(...analytics.wasteOverTime.map((d) => d.value), 1)
+                  const height = Math.max((data.value / maxValue) * 200, 2)
 
                   return (
-                    <div key={index} className="flex-1 flex flex-col items-center group">
+                    <div key={index} className="flex-shrink-0 flex flex-col items-center group min-w-[30px]">
                       <div className="relative">
                         <div
-                          className="w-full bg-gradient-to-t from-kitchzero-primary to-kitchzero-primary/60 rounded-t hover:from-kitchzero-accent hover:to-kitchzero-accent/60 transition-all duration-200 cursor-pointer"
+                          className="w-6 bg-gradient-to-t from-kitchzero-primary to-kitchzero-primary/60 rounded-t hover:from-kitchzero-accent hover:to-kitchzero-accent/60 transition-all duration-200 cursor-pointer"
                           style={{ height: `${height}px` }}
                         />
-                        <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                        <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10">
                           {formatCurrency(data.value)}
+                          <br />
+                          {data.quantity} kg
                         </div>
                       </div>
-                      <p className="text-xs text-kitchzero-text/70 mt-2 transform -rotate-45 origin-left">
-                        {new Date(data.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                      <p className="text-xs text-kitchzero-text/70 mt-2 transform -rotate-45 origin-left w-16 truncate">
+                        {timeRange === "today"
+                          ? new Date(data.date).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+                          : new Date(data.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
                       </p>
                     </div>
                   )
@@ -381,7 +422,7 @@ export default function DashboardPage() {
             <div className="h-64 flex items-center justify-center text-kitchzero-text/70">
               <div className="text-center">
                 <BarChart3 className="w-12 h-12 mx-auto mb-4 text-kitchzero-text/30" />
-                <p>No trend data available yet</p>
+                <p>No trend data available for {getTimeRangeLabel(timeRange).toLowerCase()}</p>
                 <p className="text-sm mt-1">Start logging waste to see analytics</p>
               </div>
             </div>
@@ -435,7 +476,7 @@ export default function DashboardPage() {
             <div className="h-64 flex items-center justify-center text-kitchzero-text/70">
               <div className="text-center">
                 <PieChart className="w-12 h-12 mx-auto mb-4 text-kitchzero-text/30" />
-                <p>No waste categories yet</p>
+                <p>No waste categories for {getTimeRangeLabel(timeRange).toLowerCase()}</p>
                 <p className="text-sm mt-1">Log waste entries to see top categories</p>
               </div>
             </div>
