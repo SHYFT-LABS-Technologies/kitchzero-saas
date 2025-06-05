@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getAuthUser, hashPassword } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { createUserSchema } from "@/lib/validation"
+import { handleApiError, validateAndParseBody } from "@/lib/api-utils"
 
 export async function GET(request: NextRequest) {
   try {
@@ -30,8 +32,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ users })
   } catch (error) {
-    console.error("Users fetch error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return handleApiError(error)
   }
 }
 
@@ -42,34 +43,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
-    const { username, password, role, branchId } = await request.json()
-
-    if (!username || !password || !role) {
-      return NextResponse.json({ error: "Username, password, and role are required" }, { status: 400 })
-    }
+    // Validate request body
+    const validatedData = await validateAndParseBody(request, createUserSchema)
 
     // Check if username already exists
     const existingUser = await prisma.user.findUnique({
-      where: { username },
+      where: { username: validatedData.username },
     })
 
     if (existingUser) {
-      return NextResponse.json({ error: "Username already exists" }, { status: 400 })
+      return NextResponse.json({ error: "Username already exists" }, { status: 409 })
     }
 
-    // If role is BRANCH_ADMIN, branchId is required
-    if (role === "BRANCH_ADMIN" && !branchId) {
-      return NextResponse.json({ error: "Branch ID is required for Branch Admin" }, { status: 400 })
-    }
-
-    const hashedPassword = await hashPassword(password)
+    const hashedPassword = await hashPassword(validatedData.password)
 
     const newUser = await prisma.user.create({
       data: {
-        username,
+        username: validatedData.username,
         password: hashedPassword,
-        role,
-        branchId: role === "BRANCH_ADMIN" ? branchId : null,
+        role: validatedData.role,
+        branchId: validatedData.role === "BRANCH_ADMIN" ? validatedData.branchId : null,
       },
       select: {
         id: true,
@@ -89,7 +82,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ user: newUser })
   } catch (error) {
-    console.error("User creation error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return handleApiError(error)
   }
 }

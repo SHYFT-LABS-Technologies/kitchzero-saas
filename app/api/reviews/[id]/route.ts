@@ -1,6 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { getAuthUser } from "@/lib/auth"
+import { reviewActionSchema } from "@/lib/validation"
+import { 
+  handleApiError, 
+  validateAndParseBody, 
+  validateUrlParam,
+  checkRateLimit,
+  checkPermission 
+} from "@/lib/api-utils"
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -9,8 +17,20 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // Rate limiting
+    const clientIp = request.ip || 'unknown'
+    if (!checkRateLimit(`review-get:${clientIp}`, 60, 60000)) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429 }
+      )
+    }
+
+    // Validate ID parameter
+    const reviewId = validateUrlParam("reviewId", params.id)
+
     const review = await prisma.wasteLogReview.findUnique({
-      where: { id: params.id },
+      where: { id: reviewId },
       include: {
         wasteLog: {
           include: {
@@ -48,8 +68,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     return NextResponse.json({ review })
   } catch (error) {
-    console.error("Error fetching review:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return handleApiError(error)
   }
 }
 
@@ -61,106 +80,172 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     }
 
     // Only super admins can approve/reject reviews
-    if (user.role !== "SUPER_ADMIN") {
+    if (!checkPermission(user.role, "SUPER_ADMIN")) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const data = await request.json()
-    const { action, reviewNotes } = data
-
-    if (!action || !reviewNotes) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    // Rate limiting
+    const clientIp = request.ip || 'unknown'
+    if (!checkRateLimit(`review-update:${clientIp}`, 20, 60000)) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429 }
+      )
     }
 
-    if (action !== "approve" && action !== "reject") {
-      return NextResponse.json({ error: "Invalid action" }, { status: 400 })
-    }
+    // Validate ID parameter
+    const reviewId = validateUrlParam("reviewId", params.id)
+
+    // Validate request body
+    const { action, reviewNotes } = await validateAndParseBody(request, reviewActionSchema)
 
     // Get the review
     const review = await prisma.wasteLogReview.findUnique({
-      where: { id: params.id },
+      where: { id: reviewId },
     })
 
     if (!review) {
       return NextResponse.json({ error: "Review not found" }, { status: 404 })
     }
 
-    // Update the review status
-    const updatedReview = await prisma.wasteLogReview.update({
-      where: { id: params.id },
-      data: {
-        status: action === "approve" ? "APPROVED" : "REJECTED",
-        approvedBy: user.id,
-        reviewNotes,
-        reviewedAt: new Date(),
-      },
-    })
+    if (review.status !== "PENDING") {
+     return NextResponse.json(
+       { error: "Review has already been processed" },
+       { status: 400 }
+     )
+   }
 
-    // If approved, apply the changes
-    if (action === "approve") {
-      await applyReviewChanges(updatedReview)
-    }
+   // Update the review status
+   const updatedReview = await prisma.wasteLogReview.update({
+     where: { id: reviewId },
+     data: {
+       status: action === "approve" ? "APPROVED" : "REJECTED",
+       approvedBy: user.id,
+       reviewNotes,
+       reviewedAt: new Date(),
+     },
+   })
 
-    return NextResponse.json({ review: updatedReview })
-  } catch (error) {
-    console.error("Error updating review:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
-  }
+   // If approved, apply the changes
+   if (action === "approve") {
+     try {
+       await applyReviewChanges(updatedReview)
+     } catch (applyError) {
+       console.error("Error applying review changes:", applyError)
+       
+       // Revert the review status if applying changes failed
+       await prisma.wasteLogReview.update({
+         where: { id: reviewId },
+         data: {
+           status: "PENDING",
+           approvedBy: null,
+           reviewNotes: null,
+           reviewedAt: null,
+         },
+       })
+       
+       return NextResponse.json(
+         { error: "Failed to apply changes. Review reverted to pending status." },
+         { status: 500 }
+       )
+     }
+   }
+
+   return NextResponse.json({ 
+     review: updatedReview,
+     message: `Review ${action}d successfully`
+   })
+ } catch (error) {
+   return handleApiError(error)
+ }
 }
 
+// Helper function to apply review changes
 async function applyReviewChanges(review: any) {
-  try {
-    switch (review.action) {
-      case "CREATE":
-        if (review.newData) {
-          const wasteDate = review.newData.wasteDate ? new Date(review.newData.wasteDate) : new Date()
-          
-          await prisma.wasteLog.create({
-            data: {
-              itemName: review.newData.itemName,
-              quantity: review.newData.quantity,
-              unit: review.newData.unit,
-              value: review.newData.value,
-              reason: review.newData.reason,
-              branchId: review.newData.branchId,
-              photo: review.newData.photo,
-              createdAt: wasteDate,
-              updatedAt: wasteDate,
-            },
-          })
-        }
-        break
+ try {
+   switch (review.action) {
+     case "CREATE":
+       if (review.newData) {
+         const wasteDate = review.newData.wasteDate ? new Date(review.newData.wasteDate) : new Date()
+         
+         // Validate the new data before creating
+         if (!review.newData.itemName || !review.newData.quantity || !review.newData.value) {
+           throw new Error("Invalid data for waste log creation")
+         }
+         
+         await prisma.wasteLog.create({
+           data: {
+             itemName: review.newData.itemName,
+             quantity: Number(review.newData.quantity),
+             unit: review.newData.unit || 'kg',
+             value: Number(review.newData.value),
+             reason: review.newData.reason || 'SPOILAGE',
+             branchId: review.newData.branchId,
+             photo: review.newData.photo || null,
+             createdAt: wasteDate,
+             updatedAt: wasteDate,
+           },
+         })
+       }
+       break
 
-      case "UPDATE":
-        if (review.wasteLogId && review.newData) {
-          const wasteDate = review.newData.wasteDate ? new Date(review.newData.wasteDate) : new Date()
-          
-          await prisma.wasteLog.update({
-            where: { id: review.wasteLogId },
-            data: {
-              itemName: review.newData.itemName,
-              quantity: review.newData.quantity,
-              unit: review.newData.unit,
-              value: review.newData.value,
-              reason: review.newData.reason,
-              photo: review.newData.photo,
-              createdAt: wasteDate, // Update the waste occurrence date
-              updatedAt: new Date(), // Keep current timestamp for modification time
-            },
-          })
-        }
-        break
+     case "UPDATE":
+       if (review.wasteLogId && review.newData) {
+         const wasteDate = review.newData.wasteDate ? new Date(review.newData.wasteDate) : new Date()
+         
+         // Check if the waste log still exists
+         const existingLog = await prisma.wasteLog.findUnique({
+           where: { id: review.wasteLogId }
+         })
+         
+         if (!existingLog) {
+           throw new Error("Waste log no longer exists")
+         }
+         
+         // Build update data, only including fields that are provided
+         const updateData: any = {
+           updatedAt: new Date()
+         }
+         
+         if (review.newData.itemName !== undefined) updateData.itemName = review.newData.itemName
+         if (review.newData.quantity !== undefined) updateData.quantity = Number(review.newData.quantity)
+         if (review.newData.unit !== undefined) updateData.unit = review.newData.unit
+         if (review.newData.value !== undefined) updateData.value = Number(review.newData.value)
+         if (review.newData.reason !== undefined) updateData.reason = review.newData.reason
+         if (review.newData.photo !== undefined) updateData.photo = review.newData.photo
+         if (review.newData.wasteDate !== undefined) updateData.createdAt = wasteDate
+         
+         await prisma.wasteLog.update({
+           where: { id: review.wasteLogId },
+           data: updateData,
+         })
+       }
+       break
 
-      case "DELETE":
-        if (review.wasteLogId) {
-          await prisma.wasteLog.delete({
-            where: { id: review.wasteLogId },
-          })
-        }
-        break
-    }
-  } catch (error) {
-    console.error("Error applying review changes:", error)
-    throw error
-  }
+     case "DELETE":
+       if (review.wasteLogId) {
+         // Check if the waste log still exists
+         const existingLog = await prisma.wasteLog.findUnique({
+           where: { id: review.wasteLogId }
+         })
+         
+         if (!existingLog) {
+           // Already deleted, consider this a success
+           console.warn("Waste log already deleted:", review.wasteLogId)
+           return
+         }
+         
+         await prisma.wasteLog.delete({
+           where: { id: review.wasteLogId },
+         })
+       }
+       break
+
+     default:
+       throw new Error(`Unknown review action: ${review.action}`)
+   }
+ } catch (error) {
+   console.error("Error applying review changes:", error)
+   throw error
+ }
 }

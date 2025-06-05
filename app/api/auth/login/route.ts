@@ -1,19 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { authenticateUser, generateToken } from "@/lib/auth"
+import { loginSchema } from "@/lib/validation"
+import { handleApiError, validateAndParseBody } from "@/lib/api-utils"
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("🔐 Login attempt received")
-
-    const body = await request.json()
-    const { username, password } = body
-
-    console.log("📝 Login data:", { username, password: password ? "***" : "missing" })
-
-    if (!username || !password) {
-      console.log("❌ Missing credentials")
-      return NextResponse.json({ error: "Username and password are required" }, { status: 400 })
-    }
+    // Validate request body
+    const { username, password } = await validateAndParseBody(request, loginSchema)
 
     console.log("🔍 Attempting to authenticate user:", username)
     const user = await authenticateUser(username, password)
@@ -39,16 +32,8 @@ export async function POST(request: NextRequest) {
       path: "/",
     })
 
-    console.log("🍪 Auth token set in cookie")
     return response
   } catch (error) {
-    console.error("❌ Login error:", error)
-    return NextResponse.json(
-      {
-        error: "Internal server error",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    )
+    return handleApiError(error)
   }
 }

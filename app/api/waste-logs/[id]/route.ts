@@ -1,6 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getAuthUser } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { updateWasteLogSchema, deleteWithReasonSchema } from "@/lib/validation"
+import { 
+  handleApiError, 
+  validateAndParseBody, 
+  validateUrlParam,
+  checkRateLimit,
+  checkPermission 
+} from "@/lib/api-utils"
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -9,7 +17,18 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const wasteLogId = params.id
+    // Rate limiting
+    const clientIp = request.ip || 'unknown'
+    if (!checkRateLimit(`waste-log-get:${clientIp}`, 60, 60000)) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429 }
+      )
+    }
+
+    // Validate ID parameter
+    const wasteLogId = validateUrlParam("wasteLogId", params.id)
+
     const whereClause = user.role === "SUPER_ADMIN" ? {} : { branchId: user.branchId }
 
     const wasteLog = await prisma.wasteLog.findFirst({
@@ -21,9 +40,6 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         branch: {
           select: { id: true, name: true, location: true },
         },
-        inventory: {
-          select: { id: true, itemName: true },
-        },
       },
     })
 
@@ -33,8 +49,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
 
     return NextResponse.json({ wasteLog })
   } catch (error) {
-    console.error("Waste log fetch error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return handleApiError(error)
   }
 }
 
@@ -45,8 +60,20 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const wasteLogId = params.id
-    const updateData = await request.json()
+    // Rate limiting
+    const clientIp = request.ip || 'unknown'
+    if (!checkRateLimit(`waste-log-update:${clientIp}`, 20, 60000)) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429 }
+      )
+    }
+
+    // Validate ID parameter
+    const wasteLogId = validateUrlParam("wasteLogId", params.id)
+
+    // Validate request body
+    const validatedData = await validateAndParseBody(request, updateWasteLogSchema)
 
     // Get the existing waste log
     const existingWasteLog = await prisma.wasteLog.findFirst({
@@ -60,29 +87,38 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Waste log not found" }, { status: 404 })
     }
 
-    // Parse the waste date
-    const parsedWasteDate = updateData.wasteDate ? new Date(updateData.wasteDate) : existingWasteLog.createdAt
+    // Parse the waste date if provided
+    const parsedWasteDate = validatedData.wasteDate 
+      ? new Date(validatedData.wasteDate) 
+      : existingWasteLog.createdAt
 
-    // Validate that the date is not in the future
+    // Validate date is not in future
     if (parsedWasteDate > new Date()) {
-      return NextResponse.json({ error: "Waste date cannot be in the future" }, { status: 400 })
+      return NextResponse.json(
+        { error: "Waste date cannot be in the future" },
+        { status: 400 }
+      )
     }
 
     // Super admins can update directly
     if (user.role === "SUPER_ADMIN") {
+      // Build update data object, only including provided fields
+      const updateData: any = {
+        updatedAt: new Date(),
+      }
+
+      if (validatedData.itemName !== undefined) updateData.itemName = validatedData.itemName
+      if (validatedData.quantity !== undefined) updateData.quantity = validatedData.quantity
+      if (validatedData.unit !== undefined) updateData.unit = validatedData.unit
+      if (validatedData.value !== undefined) updateData.value = validatedData.value
+      if (validatedData.reason !== undefined) updateData.reason = validatedData.reason
+      if (validatedData.photo !== undefined) updateData.photo = validatedData.photo || null
+      if (validatedData.branchId !== undefined) updateData.branchId = validatedData.branchId
+      if (validatedData.wasteDate !== undefined) updateData.createdAt = parsedWasteDate
+
       const updatedWasteLog = await prisma.wasteLog.update({
         where: { id: wasteLogId },
-        data: {
-          itemName: updateData.itemName,
-          quantity: Number.parseFloat(updateData.quantity),
-          unit: updateData.unit,
-          value: Number.parseFloat(updateData.value),
-          reason: updateData.reason,
-          photo: updateData.photo,
-          branchId: updateData.branchId || existingWasteLog.branchId,
-          createdAt: parsedWasteDate, // Update the waste date
-          updatedAt: new Date(), // Keep current timestamp for when it was last modified
-        },
+        data: updateData,
         include: {
           branch: {
             select: { id: true, name: true, location: true },
@@ -90,10 +126,13 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         },
       })
 
-      return NextResponse.json({ wasteLog: updatedWasteLog })
+      return NextResponse.json({ 
+        wasteLog: updatedWasteLog,
+        message: "Waste log updated successfully"
+      })
     }
 
-    // Branch admins need approval - include the new date in the review data
+    // Branch admins need approval
     const review = await prisma.wasteLogReview.create({
       data: {
         wasteLogId,
@@ -103,11 +142,12 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
           wasteDate: existingWasteLog.createdAt.toISOString().split("T")[0],
         },
         newData: {
-          ...updateData,
+          ...validatedData,
           wasteDate: parsedWasteDate.toISOString().split("T")[0],
         },
-        reason: updateData.reason || "Update request",
+        reason: "Update request",
         createdBy: user.id,
+        status: "PENDING"
       },
     })
 
@@ -117,8 +157,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       requiresApproval: true,
     })
   } catch (error) {
-    console.error("Waste log update error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return handleApiError(error)
   }
 }
 
@@ -129,7 +168,17 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const wasteLogId = params.id
+    // Rate limiting
+    const clientIp = request.ip || 'unknown'
+    if (!checkRateLimit(`waste-log-delete:${clientIp}`, 10, 60000)) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429 }
+      )
+    }
+
+    // Validate ID parameter
+    const wasteLogId = validateUrlParam("wasteLogId", params.id)
 
     // Get the existing waste log
     const existingWasteLog = await prisma.wasteLog.findFirst({
@@ -148,12 +197,13 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       await prisma.wasteLog.delete({
         where: { id: wasteLogId },
       })
-
-      return NextResponse.json({ message: "Waste log deleted successfully" })
+      return NextResponse.json({ 
+        message: "Waste log deleted successfully" 
+      })
     }
 
-    // Branch admins need approval
-    const { reason } = await request.json()
+    // Branch admins need approval and must provide reason
+    const { reason } = await validateAndParseBody(request, deleteWithReasonSchema)
 
     const review = await prisma.wasteLogReview.create({
       data: {
@@ -163,8 +213,9 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
           ...existingWasteLog,
           date: existingWasteLog.createdAt.toISOString().split('T')[0]
         },
-        reason: reason || "Delete request",
+        reason,
         createdBy: user.id,
+        status: "PENDING"
       },
     })
 
@@ -174,7 +225,6 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       requiresApproval: true,
     })
   } catch (error) {
-    console.error("Waste log deletion error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return handleApiError(error)
   }
 }

@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getAuthUser } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { analyticsQuerySchema } from "@/lib/validation"
+import { handleApiError, validateQueryParams, checkRateLimit } from "@/lib/api-utils"
 
 export async function GET(request: NextRequest) {
   try {
@@ -9,8 +11,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    // Rate limiting
+    const clientIp = request.ip || 'unknown'
+    if (!checkRateLimit(`analytics:${clientIp}`, 30, 60000)) { // 30 requests per minute
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429 }
+      )
+    }
+
+    // Validate query parameters using utils
     const { searchParams } = new URL(request.url)
-    const timeRange = searchParams.get("timeRange") || "today"
+    const { timeRange } = validateQueryParams(analyticsQuerySchema, searchParams)
 
     console.log("📊 Analytics request:", { user: user.username, timeRange })
 
@@ -41,17 +53,13 @@ export async function GET(request: NextRequest) {
         daysBack = 1
     }
 
-    console.log("📅 Date range:", { startDate, now, daysBack, timeRange })
-
     const whereClause = user.role === "SUPER_ADMIN" ? {} : { branchId: user.branchId }
     const timeWhereClause = {
       ...whereClause,
       createdAt: { gte: startDate, lte: now },
     }
 
-    console.log("🔍 Where clause:", whereClause)
-
-    // Get current period waste data with proper number conversion
+    // Get current period waste data with validation
     const currentWasteRaw = await prisma.wasteLog.findMany({
       where: timeWhereClause,
       select: {
@@ -61,12 +69,16 @@ export async function GET(request: NextRequest) {
     })
 
     const currentWaste = {
-      totalQuantity: currentWasteRaw.reduce((sum, log) => sum + (Number(log.quantity) || 0), 0),
-      totalValue: currentWasteRaw.reduce((sum, log) => sum + (Number(log.value) || 0), 0),
+      totalQuantity: currentWasteRaw.reduce((sum, log) => {
+        const quantity = Number(log.quantity)
+        return sum + (isNaN(quantity) || quantity < 0 ? 0 : quantity)
+      }, 0),
+      totalValue: currentWasteRaw.reduce((sum, log) => {
+        const value = Number(log.value)
+        return sum + (isNaN(value) || value < 0 ? 0 : value)
+      }, 0),
       count: currentWasteRaw.length,
     }
-
-    console.log("📈 Current waste data:", currentWaste)
 
     // Get previous period for comparison
     const previousStartDate = new Date(startDate.getTime() - daysBack * 24 * 60 * 60 * 1000)
@@ -85,26 +97,24 @@ export async function GET(request: NextRequest) {
     })
 
     const previousWaste = {
-      totalQuantity: previousWasteRaw.reduce((sum, log) => sum + (Number(log.quantity) || 0), 0),
-      totalValue: previousWasteRaw.reduce((sum, log) => sum + (Number(log.value) || 0), 0),
+      totalQuantity: previousWasteRaw.reduce((sum, log) => {
+        const quantity = Number(log.quantity)
+        return sum + (isNaN(quantity) || quantity < 0 ? 0 : quantity)
+      }, 0),
+      totalValue: previousWasteRaw.reduce((sum, log) => {
+        const value = Number(log.value)
+        return sum + (isNaN(value) || value < 0 ? 0 : value)
+      }, 0),
     }
 
-    console.log("📉 Previous waste data:", previousWaste)
+    // Calculate percentage changes with safety checks
+    const wasteChange = previousWaste.totalQuantity > 0
+      ? ((currentWaste.totalQuantity - previousWaste.totalQuantity) / previousWaste.totalQuantity) * 100
+      : currentWaste.totalQuantity > 0 ? 100 : 0
 
-    // Calculate percentage changes
-    const wasteChange =
-      previousWaste.totalQuantity > 0
-        ? ((currentWaste.totalQuantity - previousWaste.totalQuantity) / previousWaste.totalQuantity) * 100
-        : currentWaste.totalQuantity > 0
-          ? 100
-          : 0
-
-    const costChange =
-      previousWaste.totalValue > 0
-        ? ((currentWaste.totalValue - previousWaste.totalValue) / previousWaste.totalValue) * 100
-        : currentWaste.totalValue > 0
-          ? 100
-          : 0
+    const costChange = previousWaste.totalValue > 0
+      ? ((currentWaste.totalValue - previousWaste.totalValue) / previousWaste.totalValue) * 100
+      : currentWaste.totalValue > 0 ? 100 : 0
 
     // Get top 5 wasted items with proper aggregation
     const topWastedItemsRaw = await prisma.wasteLog.findMany({
@@ -116,15 +126,24 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    // Group by item name manually
+    // Group by item name with validation
     const itemGroups = new Map<string, { totalQuantity: number; totalValue: number }>()
 
     topWastedItemsRaw.forEach((log) => {
-      const existing = itemGroups.get(log.itemName) || { totalQuantity: 0, totalValue: 0 }
-      itemGroups.set(log.itemName, {
-        totalQuantity: existing.totalQuantity + (Number(log.quantity) || 0),
-        totalValue: existing.totalValue + (Number(log.value) || 0),
-      })
+      const itemName = typeof log.itemName === 'string' && log.itemName.trim() 
+        ? log.itemName.trim() 
+        : 'Unknown Item'
+      
+      const quantity = Number(log.quantity)
+      const value = Number(log.value)
+      
+      if (!isNaN(quantity) && !isNaN(value) && quantity >= 0 && value >= 0) {
+        const existing = itemGroups.get(itemName) || { totalQuantity: 0, totalValue: 0 }
+        itemGroups.set(itemName, {
+          totalQuantity: existing.totalQuantity + quantity,
+          totalValue: existing.totalValue + value,
+        })
+      }
     })
 
     const topWastedItems = Array.from(itemGroups.entries())
@@ -135,8 +154,6 @@ export async function GET(request: NextRequest) {
       }))
       .sort((a, b) => b.totalValue - a.totalValue)
       .slice(0, 5)
-
-    console.log("🏆 Top wasted items:", topWastedItems.length)
 
     // Get waste over time with proper date grouping
     const wasteOverTimeRaw = await prisma.wasteLog.findMany({
@@ -151,20 +168,17 @@ export async function GET(request: NextRequest) {
       },
     })
 
-    // Group by date or hour depending on time range
+    // Generate time slots and process data
     const wasteByTime = new Map<string, { quantity: number; value: number }>()
-
-    // Generate time slots first
     const timeSlots: string[] = []
+
     if (timeRange === "today") {
-      // Generate hourly slots for today
       for (let hour = 0; hour < 24; hour++) {
         const slotDate = new Date(startDate)
         slotDate.setHours(hour, 0, 0, 0)
         timeSlots.push(slotDate.toISOString())
       }
     } else {
-      // Generate daily slots
       for (let i = 0; i < daysBack; i++) {
         const slotDate = new Date(startDate.getTime() + i * 24 * 60 * 60 * 1000)
         timeSlots.push(slotDate.toISOString().split("T")[0])
@@ -176,25 +190,35 @@ export async function GET(request: NextRequest) {
       wasteByTime.set(slot, { quantity: 0, value: 0 })
     })
 
-    // Fill in actual data
+    // Fill in actual data with validation
     wasteOverTimeRaw.forEach((log) => {
-      let timeKey: string
-      if (timeRange === "today") {
-        // Group by hour for today
-        const logDate = new Date(log.createdAt)
-        logDate.setMinutes(0, 0, 0)
-        timeKey = logDate.toISOString()
-      } else {
-        // Group by date for other ranges
-        timeKey = log.createdAt.toISOString().split("T")[0]
-      }
+      try {
+        let timeKey: string
+        if (timeRange === "today") {
+          const logDate = new Date(log.createdAt)
+          if (isNaN(logDate.getTime())) return
+          logDate.setMinutes(0, 0, 0)
+          timeKey = logDate.toISOString()
+        } else {
+          const logDate = new Date(log.createdAt)
+          if (isNaN(logDate.getTime())) return
+          timeKey = logDate.toISOString().split("T")[0]
+        }
 
-      const existing = wasteByTime.get(timeKey)
-      if (existing) {
-        wasteByTime.set(timeKey, {
-          quantity: existing.quantity + (Number(log.quantity) || 0),
-          value: existing.value + (Number(log.value) || 0),
-        })
+        const quantity = Number(log.quantity)
+        const value = Number(log.value)
+        
+        if (!isNaN(quantity) && !isNaN(value) && quantity >= 0 && value >= 0) {
+          const existing = wasteByTime.get(timeKey)
+          if (existing) {
+            wasteByTime.set(timeKey, {
+              quantity: existing.quantity + quantity,
+              value: existing.value + value,
+            })
+          }
+        }
+      } catch (error) {
+        console.warn("Invalid log entry skipped:", error)
       }
     })
 
@@ -206,79 +230,69 @@ export async function GET(request: NextRequest) {
       }))
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
 
-    console.log("📊 Waste over time:", wasteOverTime.length, "data points")
+    // Get inventory stats with error handling
+    let inventoryCount = 0
+    let expiringItems = 0
 
-    // Get inventory stats
-    const inventoryCount = await prisma.inventory.count({
-      where: whereClause,
-    })
+    try {
+      inventoryCount = await prisma.inventory.count({
+        where: whereClause,
+      })
 
-    // Get expiring items (within 7 days)
-    const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
-    const expiringItems = await prisma.inventory.count({
-      where: {
-        ...whereClause,
-        expiryDate: {
-          gte: now,
-          lte: sevenDaysFromNow,
+      const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+      expiringItems = await prisma.inventory.count({
+        where: {
+          ...whereClause,
+          expiryDate: {
+            gte: now,
+            lte: sevenDaysFromNow,
+          },
         },
-      },
-    })
-
-    console.log("📦 Inventory stats:", { total: inventoryCount, expiring: expiringItems })
+      })
+    } catch (error) {
+      console.warn("Error fetching inventory stats:", error)
+    }
 
     // Get branch and user counts (Super Admin only)
     let branchCount = 0
     let userCount = 0
+    
     if (user.role === "SUPER_ADMIN") {
-      branchCount = await prisma.branch.count()
-      userCount = await prisma.user.count()
-      console.log("👥 Admin stats:", { branches: branchCount, users: userCount })
+      try {
+        branchCount = await prisma.branch.count()
+        userCount = await prisma.user.count()
+      } catch (error) {
+        console.warn("Error fetching admin stats:", error)
+      }
     }
 
-    // Calculate efficiency score based on waste reduction trend
-    const efficiencyScore = Math.max(0, Math.min(100, 100 - Math.abs(wasteChange)))
-
-    // Calculate estimated cost savings (based on waste reduction)
-    const costSavings = wasteChange < 0 ? Math.abs(wasteChange / 100) * currentWaste.totalValue : 0
+    // Calculate metrics with safety checks
+    const safeWasteChange = isNaN(wasteChange) ? 0 : Math.max(-100, Math.min(100, wasteChange))
+    const safeCostChange = isNaN(costChange) ? 0 : Math.max(-100, Math.min(100, costChange))
+    
+    const efficiencyScore = Math.max(0, Math.min(100, 100 - Math.abs(safeWasteChange)))
+    const costSavings = safeWasteChange < 0 
+      ? Math.abs(safeWasteChange / 100) * currentWaste.totalValue 
+      : 0
 
     const analytics = {
-      // Current period totals
       totalWasteKg: Number(currentWaste.totalQuantity.toFixed(1)),
       totalWasteLKR: Number(currentWaste.totalValue.toFixed(0)),
       totalWasteEntries: currentWaste.count,
-
-      // Percentage changes
-      wasteChange: Number(wasteChange.toFixed(1)),
-      costChange: Number(costChange.toFixed(1)),
-
-      // Calculated metrics
+      wasteChange: Number(safeWasteChange.toFixed(1)),
+      costChange: Number(safeCostChange.toFixed(1)),
       efficiencyScore: Number(efficiencyScore.toFixed(1)),
       costSavings: Number(costSavings.toFixed(0)),
-
-      // Inventory data
       totalInventoryItems: inventoryCount,
       expiringItems,
-
-      // Admin-only data
       totalBranches: branchCount,
       totalUsers: userCount,
-
-      // Chart data
       topWastedItems,
       wasteOverTime,
     }
 
-    console.log("✅ Analytics response:", {
-      totalWasteKg: analytics.totalWasteKg,
-      totalWasteLKR: analytics.totalWasteLKR,
-      topItemsCount: analytics.topWastedItems.length,
-      timeDataPoints: analytics.wasteOverTime.length,
-    })
-
     return NextResponse.json({ analytics })
   } catch (error) {
-    console.error("❌ Analytics fetch error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return handleApiError(error)
   }
 }

@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getAuthUser } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { inventorySchema } from "@/lib/validation"
+import { handleApiError, validateAndParseBody } from "@/lib/api-utils"
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,8 +25,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ inventory })
   } catch (error) {
-    console.error("Inventory fetch error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return handleApiError(error)
   }
 }
 
@@ -35,10 +36,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { itemName, quantity, unit, expiryDate, purchaseCost, branchId } = await request.json()
+    // Validate request body
+    const validatedData = await validateAndParseBody(request, inventorySchema)
 
     // Branch admins can only add to their own branch
-    const targetBranchId = user.role === "SUPER_ADMIN" ? branchId : user.branchId
+    const targetBranchId = user.role === "SUPER_ADMIN" 
+      ? validatedData.branchId || user.branchId 
+      : user.branchId
 
     if (!targetBranchId) {
       return NextResponse.json({ error: "Branch ID is required" }, { status: 400 })
@@ -46,11 +50,11 @@ export async function POST(request: NextRequest) {
 
     const item = await prisma.inventory.create({
       data: {
-        itemName,
-        quantity: Number.parseFloat(quantity),
-        unit,
-        expiryDate: new Date(expiryDate),
-        purchaseCost: Number.parseFloat(purchaseCost),
+        itemName: validatedData.itemName,
+        quantity: validatedData.quantity,
+        unit: validatedData.unit,
+        expiryDate: new Date(validatedData.expiryDate),
+        purchaseCost: validatedData.purchaseCost,
         branchId: targetBranchId,
       },
       include: {
@@ -62,7 +66,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ item })
   } catch (error) {
-    console.error("Inventory creation error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return handleApiError(error)
   }
 }
