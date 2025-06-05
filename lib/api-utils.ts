@@ -130,8 +130,6 @@ export async function validateAndParseBody<T>(
 
 // Helper to validate URL parameters (like [id])
 export function validateUrlParam(paramName: string, paramValue: string): string {
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-  
   if (!paramValue) {
     throw new ValidationError(`${paramName} is required`, [
       {
@@ -144,7 +142,10 @@ export function validateUrlParam(paramName: string, paramValue: string): string 
     ])
   }
   
-  if (!uuidRegex.test(paramValue)) {
+  // More flexible UUID validation that accepts different formats
+  const uuidRegex = /^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$/i
+  
+  if (!uuidRegex.test(paramValue.replace(/-/g, ''))) {
     throw new ValidationError(`Invalid ${paramName} format`, [
       {
         code: 'invalid_string',
@@ -155,7 +156,40 @@ export function validateUrlParam(paramName: string, paramValue: string): string 
     ])
   }
   
+  // Normalize UUID format (add dashes if missing)
+  const cleanId = paramValue.replace(/-/g, '')
+  if (cleanId.length === 32) {
+    return `${cleanId.slice(0,8)}-${cleanId.slice(8,12)}-${cleanId.slice(12,16)}-${cleanId.slice(16,20)}-${cleanId.slice(20)}`
+  }
+  
   return paramValue
+}
+
+export function validateSimpleParam(paramName: string, paramValue: string): string {
+  if (!paramValue || paramValue.trim() === '') {
+    throw new ValidationError(`${paramName} is required`, [
+      {
+        code: 'invalid_type',
+        expected: 'string',
+        received: 'undefined',
+        path: [paramName],
+        message: `${paramName} is required`
+      }
+    ])
+  }
+  
+  // Basic validation - just check if it's a reasonable length and format
+  if (paramValue.length < 10 || paramValue.length > 50) {
+    throw new ValidationError(`Invalid ${paramName} format`, [
+      {
+        code: 'invalid_string',
+        path: [paramName],
+        message: `${paramName} has invalid format`
+      }
+    ])
+  }
+  
+  return paramValue.trim()
 }
 
 // Helper to safely parse numbers from strings

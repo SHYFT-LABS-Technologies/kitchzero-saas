@@ -56,14 +56,18 @@ export const createUserSchema = z.object({
     .min(6, "Password must be at least 6 characters")
     .max(100, "Password is too long"),
   role: userRoleSchema,
-  branchId: uuidSchema.optional()
+  branchId: z.string()
+    .min(1, "Branch ID is required")
+    .optional()
+    .nullable()
 }).refine((data) => {
-  if (data.role === 'BRANCH_ADMIN' && !data.branchId) {
+  // Only require branchId if role is BRANCH_ADMIN
+  if (data.role === 'BRANCH_ADMIN' && (!data.branchId || data.branchId.trim() === '')) {
     return false
   }
   return true
 }, {
-  message: "Branch ID is required for Branch Admin role",
+  message: "Branch selection is required for Branch Admin role",
   path: ["branchId"]
 })
 
@@ -71,23 +75,31 @@ export const updateUserSchema = z.object({
   username: z.string()
     .min(3, "Username must be at least 3 characters")
     .max(50, "Username must be less than 50 characters")
-    .regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores"),
+    .regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores")
+    .optional(),
   password: z.string()
     .min(6, "Password must be at least 6 characters")
     .max(100, "Password is too long")
     .optional()
     .or(z.literal("")), // Allow empty string for "no password change"
-  role: userRoleSchema,
-  branchId: uuidSchema.optional().nullable()
+  role: userRoleSchema.optional(),
+  branchId: z.string()
+    .min(1, "Branch ID is required")
+    .optional()
+    .nullable()
 }).refine((data) => {
   // Only require branchId if role is BRANCH_ADMIN
-  if (data.role === 'BRANCH_ADMIN' && !data.branchId) {
+  if (data.role === 'BRANCH_ADMIN' && (!data.branchId || data.branchId.trim() === '')) {
+    return false
+  }
+  // At least one field must be provided for update
+  if (!data.username && !data.password && !data.role && data.branchId === undefined) {
     return false
   }
   return true
 }, {
-  message: "Branch ID is required for Branch Admin role",
-  path: ["branchId"]
+  message: "At least one field must be provided for update, and Branch selection is required for Branch Admin role",
+  path: ["root"]
 })
 
 // Branch validation schemas
@@ -102,8 +114,6 @@ export const branchSchema = z.object({
     .trim()
 })
 
-
-// Add a new schema specifically for UPDATE operations
 export const updateBranchSchema = z.object({
   name: z.string()
     .min(1, "Branch name is required")
@@ -193,20 +203,6 @@ export const deleteWithReasonSchema = z.object({
     .min(1, "Reason is required for deletion")
     .max(500, "Reason must be less than 500 characters")
     .trim()
-})
-
-// Query parameter validation
-export const paginationSchema = z.object({
-  page: z.string().regex(/^\d+$/, "Page must be a number").transform(Number).optional().default(1),
-  limit: z.string().regex(/^\d+$/, "Limit must be a number").transform(Number).optional().default(20)
-}).refine((data) => {
-  return data.page >= 1 && data.limit >= 1 && data.limit <= 100
-}, "Invalid pagination parameters")
-
-export const searchSchema = z.object({
-  q: z.string().max(100, "Search query too long").optional(),
-  sortBy: z.string().max(50, "Sort field too long").optional(),
-  sortOrder: z.enum(['asc', 'desc']).optional().default('desc')
 })
 
 // Custom error class for validation errors

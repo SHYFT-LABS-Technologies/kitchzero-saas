@@ -87,38 +87,117 @@ export default function BranchesPage() {
       const url = editingBranch ? `/api/branches/${editingBranch.id}` : "/api/branches"
       const method = editingBranch ? "PUT" : "POST"
 
+      // Validate form data before sending
+      if (!branchFormData.name.trim()) {
+        alert("Branch name is required")
+        return
+      }
+      if (!branchFormData.location.trim()) {
+        alert("Location is required")
+        return
+      }
+
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(branchFormData),
+        body: JSON.stringify({
+          name: branchFormData.name.trim(),
+          location: branchFormData.location.trim()
+        }),
       })
+
+      const result = await response.json()
 
       if (response.ok) {
         setShowBranchForm(false)
         setEditingBranch(null)
         setBranchFormData({ name: "", location: "" })
         fetchBranches()
+        // Show success message if available
+        if (result.message) {
+          alert(result.message)
+        }
       } else {
-        const error = await response.json()
-        alert(error.error || "Failed to save branch")
+        // Handle validation errors
+        if (result.details && Array.isArray(result.details)) {
+          const errorMessages = result.details.map((detail: any) =>
+            `${detail.field}: ${detail.message}`
+          ).join('\n')
+          alert(`Validation errors:\n${errorMessages}`)
+        } else {
+          alert(result.error || "Failed to save branch")
+        }
       }
     } catch (error) {
       console.error("Failed to save branch:", error)
-      alert("Failed to save branch")
+      alert("Failed to save branch. Please check your connection and try again.")
     }
   }
 
   const handleUserSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
     try {
+      // Client-side validation
+      if (!userFormData.username.trim()) {
+        alert("Username is required")
+        return
+      }
+
+      if (userFormData.username.trim().length < 3) {
+        alert("Username must be at least 3 characters long")
+        return
+      }
+
+      if (!editingUser && !userFormData.password.trim()) {
+        alert("Password is required")
+        return
+      }
+
+      if (!editingUser && userFormData.password.length < 6) {
+        alert("Password must be at least 6 characters long")
+        return
+      }
+
+      if (!userFormData.role) {
+        alert("Role is required")
+        return
+      }
+
+      if (userFormData.role === "BRANCH_ADMIN" && !userFormData.branchId) {
+        alert("Branch selection is required for Branch Admin role")
+        return
+      }
+
       const url = editingUser ? `/api/users/${editingUser.id}` : "/api/users"
       const method = editingUser ? "PUT" : "POST"
+
+      // Prepare clean data
+      const submitData: any = {
+        username: userFormData.username.trim(),
+        role: userFormData.role,
+      }
+
+      // Only include password if it's provided
+      if (userFormData.password.trim()) {
+        submitData.password = userFormData.password
+      }
+
+      // Only include branchId for BRANCH_ADMIN role
+      if (userFormData.role === "BRANCH_ADMIN") {
+        submitData.branchId = userFormData.branchId
+      }
+
+      console.log("Submitting user data:", submitData)
 
       const response = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(userFormData),
+        body: JSON.stringify(submitData),
       })
+
+      const result = await response.json()
+      console.log("User submission result:", result)
 
       if (response.ok) {
         setShowUserForm(false)
@@ -126,33 +205,55 @@ export default function BranchesPage() {
         setUserFormData({ username: "", password: "", role: "BRANCH_ADMIN", branchId: "" })
         fetchUsers()
         fetchBranches()
+
+        if (result.message) {
+          alert(result.message)
+        }
       } else {
-        const error = await response.json()
-        alert(error.error || "Failed to save user")
+        // Handle validation errors
+        if (result.details && Array.isArray(result.details)) {
+          const errorMessages = result.details.map((detail: any) =>
+            `${detail.field}: ${detail.message}`
+          ).join('\n')
+          alert(`Validation errors:\n${errorMessages}`)
+        } else {
+          alert(result.error || "Failed to save user")
+        }
       }
     } catch (error) {
       console.error("Failed to save user:", error)
-      alert("Failed to save user")
+      alert("Failed to save user. Please check your connection and try again.")
     }
   }
 
   const handleDeleteBranch = async (branchId: string) => {
-    if (!confirm("Are you sure you want to delete this branch?")) return
+    if (!confirm("Are you sure you want to delete this branch? This will also delete all associated inventory and waste logs.")) return
 
     try {
       const response = await fetch(`/api/branches/${branchId}`, {
         method: "DELETE",
       })
 
+      const result = await response.json()
+
       if (response.ok) {
         fetchBranches()
+        if (result.warning) {
+          alert(`${result.message}\n\nWarning: ${result.warning}`)
+        } else if (result.message) {
+          alert(result.message)
+        }
       } else {
-        const error = await response.json()
-        alert(error.error || "Failed to delete branch")
+        if (result.dependencies) {
+          const deps = result.dependencies
+          alert(`${result.error}\n\nDependencies:\n- Users: ${deps.users}\n- Inventory: ${deps.inventory}\n- Waste Logs: ${deps.wasteLogs}`)
+        } else {
+          alert(result.error || "Failed to delete branch")
+        }
       }
     } catch (error) {
       console.error("Failed to delete branch:", error)
-      alert("Failed to delete branch")
+      alert("Failed to delete branch. Please check your connection and try again.")
     }
   }
 
@@ -164,16 +265,20 @@ export default function BranchesPage() {
         method: "DELETE",
       })
 
+      const result = await response.json()
+
       if (response.ok) {
         fetchUsers()
         fetchBranches()
+        if (result.message) {
+          alert(result.message)
+        }
       } else {
-        const error = await response.json()
-        alert(error.error || "Failed to delete user")
+        alert(result.error || "Failed to delete user")
       }
     } catch (error) {
       console.error("Failed to delete user:", error)
-      alert("Failed to delete user")
+      alert("Failed to delete user. Please check your connection and try again.")
     }
   }
 
@@ -187,6 +292,11 @@ export default function BranchesPage() {
   }
 
   const openEditUser = (user: User) => {
+    // Make sure branches are loaded
+    if (user?.role === "SUPER_ADMIN" && branches.length === 0) {
+      fetchBranches();
+    }
+
     setEditingUser(user)
     setUserFormData({
       username: user.username,
@@ -194,6 +304,17 @@ export default function BranchesPage() {
       role: user.role,
       branchId: user.branchId || "",
     })
+    setShowUserForm(true)
+  }
+
+  const openNewUserForm = () => {
+    // Make sure branches are loaded
+    if (user?.role === "SUPER_ADMIN" && branches.length === 0) {
+      fetchBranches();
+    }
+
+    setEditingUser(null)
+    setUserFormData({ username: "", password: "", role: "BRANCH_ADMIN", branchId: "" })
     setShowUserForm(true)
   }
 
@@ -258,7 +379,7 @@ export default function BranchesPage() {
 
               <div className="mt-6 lg:mt-0 flex items-center space-x-3">
                 <button
-                  onClick={() => setShowUserForm(true)}
+                  onClick={openNewUserForm} // Use the new function
                   className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 font-medium text-sm shadow-sm hover:shadow-md"
                 >
                   <UserPlus className="w-4 h-4" />
@@ -515,7 +636,10 @@ export default function BranchesPage() {
                     <label className="block text-sm font-semibold text-slate-700 mb-2">Assign to Branch *</label>
                     <select
                       value={userFormData.branchId}
-                      onChange={(e) => setUserFormData({ ...userFormData, branchId: e.target.value })}
+                      onChange={(e) => {
+                        console.log("Branch selected:", e.target.value); // Debug log
+                        setUserFormData({ ...userFormData, branchId: e.target.value })
+                      }}
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200 text-sm"
                       required
                     >
@@ -656,11 +780,10 @@ export default function BranchesPage() {
                               <span className="text-sm font-medium text-slate-700">{branchUser.username}</span>
                             </div>
                             <span
-                              className={`text-xs px-2 py-1 rounded-full font-medium ${
-                                branchUser.role === "SUPER_ADMIN"
-                                  ? "bg-red-100 text-red-700 border border-red-200"
-                                  : "bg-blue-100 text-blue-700 border border-blue-200"
-                              }`}
+                              className={`text-xs px-2 py-1 rounded-full font-medium ${branchUser.role === "SUPER_ADMIN"
+                                ? "bg-red-100 text-red-700 border border-red-200"
+                                : "bg-blue-100 text-blue-700 border border-blue-200"
+                                }`}
                             >
                               {branchUser.role === "SUPER_ADMIN" ? "Super" : "Admin"}
                             </span>
@@ -762,11 +885,10 @@ export default function BranchesPage() {
                       </td>
                       <td className="py-5 px-6">
                         <span
-                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border ${
-                            userData.role === "SUPER_ADMIN"
-                              ? "bg-red-50 text-red-700 border-red-200"
-                              : "bg-blue-50 text-blue-700 border-blue-200"
-                          }`}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border ${userData.role === "SUPER_ADMIN"
+                            ? "bg-red-50 text-red-700 border-red-200"
+                            : "bg-blue-50 text-blue-700 border-blue-200"
+                            }`}
                         >
                           <Shield className="w-3 h-3" />
                           {userData.role === "SUPER_ADMIN" ? "Super Admin" : "Branch Admin"}

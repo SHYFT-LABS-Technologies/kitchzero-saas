@@ -148,3 +148,16 @@ function ToastItem({ toast, onRemove }: { toast: Toast; onRemove: (id: string) =
     </div>
   )
 }
+
+export function addValidationErrors(
+  errors: ValidationErrorDetail[],
+  title: string = "Validation Error"
+) {
+  errors.forEach((error) => {
+    addToast({
+      type: "error",
+      title: title,
+      message: `${error.field}: ${error.message}`,
+    })
+  })
+}

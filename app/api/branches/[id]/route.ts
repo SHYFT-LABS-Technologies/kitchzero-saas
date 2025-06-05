@@ -5,7 +5,7 @@ import { branchSchema } from "@/lib/validation"
 import { 
   handleApiError, 
   validateAndParseBody, 
-  validateUrlParam,
+  validateSimpleParam, // Use simple validation instead
   checkRateLimit,
   checkPermission 
 } from "@/lib/api-utils"
@@ -17,12 +17,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Check permission
     if (!checkPermission(user.role, "SUPER_ADMIN")) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    // Rate limiting
     const clientIp = request.ip || 'unknown'
     if (!checkRateLimit(`branch-get:${clientIp}`, 60, 60000)) {
       return NextResponse.json(
@@ -31,8 +29,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       )
     }
 
-    // Validate ID parameter
-    const branchId = validateUrlParam("branchId", params.id)
+    const branchId = validateSimpleParam("branchId", params.id)
 
     const branch = await prisma.branch.findUnique({
       where: { id: branchId },
@@ -63,12 +60,10 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Check permission
     if (!checkPermission(user.role, "SUPER_ADMIN")) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    // Rate limiting
     const clientIp = request.ip || 'unknown'
     if (!checkRateLimit(`branch-update:${clientIp}`, 20, 60000)) {
       return NextResponse.json(
@@ -77,11 +72,26 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       )
     }
 
-    // Validate ID parameter
-    const branchId = validateUrlParam("branchId", params.id)
+    const branchId = validateSimpleParam("branchId", params.id)
 
-    // Validate request body
-    const { name, location } = await validateAndParseBody(request, branchSchema)
+    // Get request body
+    const body = await request.json()
+    console.log("Update branch request body:", body)
+
+    // Simple validation
+    if (!body.name || body.name.trim().length === 0) {
+      return NextResponse.json(
+        { error: "Branch name is required" },
+        { status: 400 }
+      )
+    }
+
+    if (!body.location || body.location.trim().length === 0) {
+      return NextResponse.json(
+        { error: "Location is required" },
+        { status: 400 }
+      )
+    }
 
     // Check if branch exists
     const existingBranch = await prisma.branch.findUnique({
@@ -95,7 +105,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     // Check for duplicate branch name (excluding current branch)
     const duplicateBranch = await prisma.branch.findFirst({
       where: {
-        name,
+        name: body.name.trim(),
         NOT: { id: branchId }
       }
     })
@@ -109,7 +119,10 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 
     const updatedBranch = await prisma.branch.update({
       where: { id: branchId },
-      data: { name, location },
+      data: { 
+        name: body.name.trim(), 
+        location: body.location.trim() 
+      },
       include: {
         users: {
           select: { id: true, username: true, role: true },
@@ -125,6 +138,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       message: "Branch updated successfully"
     })
   } catch (error) {
+    console.error("Error updating branch:", error)
     return handleApiError(error)
   }
 }
@@ -136,12 +150,10 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Check permission
     if (!checkPermission(user.role, "SUPER_ADMIN")) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    // Rate limiting
     const clientIp = request.ip || 'unknown'
     if (!checkRateLimit(`branch-delete:${clientIp}`, 10, 60000)) {
       return NextResponse.json(
@@ -150,44 +162,64 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       )
     }
 
-    // Validate ID parameter
-    const branchId = validateUrlParam("branchId", params.id)
+    const branchId = validateSimpleParam("branchId", params.id)
 
-    // Check if branch has users assigned
-    const branchWithUsers = await prisma.branch.findUnique({
+    // Check if branch exists and get dependency information
+    const branchWithDependencies = await prisma.branch.findUnique({
       where: { id: branchId },
       include: {
         users: true,
         _count: {
-          select: { inventory: true, wasteLogs: true },
+          select: { 
+            inventory: true, 
+            wasteLogs: true 
+          },
         },
       },
     })
 
-    if (!branchWithUsers) {
+    if (!branchWithDependencies) {
       return NextResponse.json({ error: "Branch not found" }, { status: 404 })
     }
 
-    if (branchWithUsers.users.length > 0) {
+    // Check for users assigned to this branch
+    if (branchWithDependencies.users.length > 0) {
       return NextResponse.json(
         { 
           error: "Cannot delete branch with assigned users",
-          details: `This branch has ${branchWithUsers.users.length} user(s) assigned. Please reassign or delete users first.`
+          details: `This branch has ${branchWithDependencies.users.length} user(s) assigned. Please reassign or delete users first.`,
+          dependencies: {
+            users: branchWithDependencies.users.length,
+            inventory: branchWithDependencies._count.inventory,
+            wasteLogs: branchWithDependencies._count.wasteLogs
+          }
         },
         { status: 400 }
       )
     }
 
-    if (branchWithUsers._count.inventory > 0 || branchWithUsers._count.wasteLogs > 0) {
-      return NextResponse.json(
-        { 
-          error: "Cannot delete branch with existing data",
-          details: `This branch has ${branchWithUsers._count.inventory} inventory items and ${branchWithUsers._count.wasteLogs} waste logs. Please remove this data first.`
-        },
-        { status: 400 }
-      )
+    // For MVP, allow deletion even with inventory/waste logs, but warn the user
+    if (branchWithDependencies._count.inventory > 0 || branchWithDependencies._count.wasteLogs > 0) {
+      // First delete related records
+      await prisma.$transaction([
+        prisma.inventory.deleteMany({
+          where: { branchId: branchId }
+        }),
+        prisma.wasteLog.deleteMany({
+          where: { branchId: branchId }
+        }),
+        prisma.branch.delete({
+          where: { id: branchId }
+        })
+      ])
+
+      return NextResponse.json({ 
+        message: "Branch and all related data deleted successfully",
+        warning: `Deleted ${branchWithDependencies._count.inventory} inventory items and ${branchWithDependencies._count.wasteLogs} waste logs`
+      })
     }
 
+    // If no dependencies, proceed with simple deletion
     await prisma.branch.delete({
       where: { id: branchId },
     })
@@ -196,6 +228,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       message: "Branch deleted successfully" 
     })
   } catch (error) {
+    console.error("Error deleting branch:", error)
     return handleApiError(error)
   }
 }

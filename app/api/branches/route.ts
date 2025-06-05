@@ -1,12 +1,23 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getAuthUser } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { branchSchema } from "@/lib/validation"
+import { handleApiError, validateAndParseBody, checkRateLimit } from "@/lib/api-utils"
 
 export async function GET(request: NextRequest) {
   try {
     const user = await getAuthUser(request)
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    // Rate limiting
+    const clientIp = request.ip || 'unknown'
+    if (!checkRateLimit(`branches-get:${clientIp}`, 60, 60000)) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429 }
+      )
     }
 
     let branches
@@ -20,6 +31,7 @@ export async function GET(request: NextRequest) {
             select: { inventory: true, wasteLogs: true },
           },
         },
+        orderBy: { createdAt: "desc" },
       })
     } else {
       branches = await prisma.branch.findMany({
@@ -37,8 +49,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ branches })
   } catch (error) {
-    console.error("Branches fetch error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return handleApiError(error)
   }
 }
 
@@ -49,19 +60,50 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
-    const { name, location } = await request.json()
+    // Rate limiting
+    const clientIp = request.ip || 'unknown'
+    if (!checkRateLimit(`branches-create:${clientIp}`, 20, 60000)) {
+      return NextResponse.json(
+        { error: "Too many requests. Please try again later." },
+        { status: 429 }
+      )
+    }
 
-    if (!name || !location) {
-      return NextResponse.json({ error: "Name and location are required" }, { status: 400 })
+    // Validate request body
+    const validatedData = await validateAndParseBody(request, branchSchema)
+
+    // Check for duplicate branch name
+    const existingBranch = await prisma.branch.findFirst({
+      where: { name: validatedData.name }
+    })
+
+    if (existingBranch) {
+      return NextResponse.json(
+        { error: "A branch with this name already exists" },
+        { status: 409 }
+      )
     }
 
     const branch = await prisma.branch.create({
-      data: { name, location },
+      data: {
+        name: validatedData.name,
+        location: validatedData.location,
+      },
+      include: {
+        users: {
+          select: { id: true, username: true, role: true },
+        },
+        _count: {
+          select: { inventory: true, wasteLogs: true },
+        },
+      },
     })
 
-    return NextResponse.json({ branch })
+    return NextResponse.json({ 
+      branch,
+      message: "Branch created successfully"
+    })
   } catch (error) {
-    console.error("Branch creation error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return handleApiError(error)
   }
 }

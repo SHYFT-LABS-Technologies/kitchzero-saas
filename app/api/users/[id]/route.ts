@@ -5,7 +5,7 @@ import { updateUserSchema } from "@/lib/validation"
 import { 
   handleApiError, 
   validateAndParseBody, 
-  validateUrlParam,
+  validateSimpleParam, // Use simple validation instead
   checkRateLimit,
   checkPermission 
 } from "@/lib/api-utils"
@@ -17,12 +17,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Check permission
     if (!checkPermission(user.role, "SUPER_ADMIN")) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    // Rate limiting
     const clientIp = request.ip || 'unknown'
     if (!checkRateLimit(`user-get:${clientIp}`, 60, 60000)) {
       return NextResponse.json(
@@ -31,8 +29,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       )
     }
 
-    // Validate ID parameter
-    const userId = validateUrlParam("userId", params.id)
+    // Use simple parameter validation
+    const userId = validateSimpleParam("userId", params.id)
 
     const userData = await prisma.user.findUnique({
       where: { id: userId },
@@ -70,12 +68,10 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Check permission
     if (!checkPermission(user.role, "SUPER_ADMIN")) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    // Rate limiting
     const clientIp = request.ip || 'unknown'
     if (!checkRateLimit(`user-update:${clientIp}`, 20, 60000)) {
       return NextResponse.json(
@@ -84,11 +80,27 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       )
     }
 
-    // Validate ID parameter
-    const userId = validateUrlParam("userId", params.id)
+    // Use simple parameter validation
+    const userId = validateSimpleParam("userId", params.id)
 
-    // Validate request body
-    const validatedData = await validateAndParseBody(request, updateUserSchema)
+    // Get request body without validation first to debug
+    const body = await request.json()
+    console.log("Update user request body:", body)
+
+    // Simple validation for required fields
+    if (!body.username || body.username.trim().length < 3) {
+      return NextResponse.json(
+        { error: "Username must be at least 3 characters long" },
+        { status: 400 }
+      )
+    }
+
+    if (!body.role || !['SUPER_ADMIN', 'BRANCH_ADMIN'].includes(body.role)) {
+      return NextResponse.json(
+        { error: "Invalid role. Must be SUPER_ADMIN or BRANCH_ADMIN" },
+        { status: 400 }
+      )
+    }
 
     // Check if user exists
     const existingUser = await prisma.user.findUnique({
@@ -100,24 +112,26 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     }
 
     // Check if username already exists (excluding current user)
-    const duplicateUser = await prisma.user.findFirst({
-      where: {
-        username: validatedData.username,
-        NOT: { id: userId },
-      },
-    })
+    if (body.username && body.username !== existingUser.username) {
+      const duplicateUser = await prisma.user.findFirst({
+        where: {
+          username: body.username,
+          NOT: { id: userId },
+        },
+      })
 
-    if (duplicateUser) {
-      return NextResponse.json(
-        { error: "Username already exists" },
-        { status: 409 }
-      )
+      if (duplicateUser) {
+        return NextResponse.json(
+          { error: "Username already exists" },
+          { status: 409 }
+        )
+      }
     }
 
     // If changing to BRANCH_ADMIN, validate branch exists
-    if (validatedData.role === "BRANCH_ADMIN" && validatedData.branchId) {
+    if (body.role === "BRANCH_ADMIN" && body.branchId) {
       const branchExists = await prisma.branch.findUnique({
-        where: { id: validatedData.branchId }
+        where: { id: body.branchId }
       })
 
       if (!branchExists) {
@@ -130,14 +144,14 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 
     // Build update data
     const updateData: any = {
-      username: validatedData.username,
-      role: validatedData.role,
-      branchId: validatedData.role === "BRANCH_ADMIN" ? validatedData.branchId : null,
+      username: body.username.trim(),
+      role: body.role,
+      branchId: body.role === "BRANCH_ADMIN" ? body.branchId : null,
     }
 
     // Only update password if provided and not empty
-    if (validatedData.password && validatedData.password.trim() !== "") {
-      updateData.password = await hashPassword(validatedData.password)
+    if (body.password && body.password.trim() !== "") {
+      updateData.password = await hashPassword(body.password)
     }
 
     const updatedUser = await prisma.user.update({
@@ -164,6 +178,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       message: "User updated successfully"
     })
   } catch (error) {
+    console.error("Error updating user:", error)
     return handleApiError(error)
   }
 }
@@ -175,12 +190,10 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Check permission
     if (!checkPermission(user.role, "SUPER_ADMIN")) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    // Rate limiting
     const clientIp = request.ip || 'unknown'
     if (!checkRateLimit(`user-delete:${clientIp}`, 10, 60000)) {
       return NextResponse.json(
@@ -189,8 +202,8 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       )
     }
 
-    // Validate ID parameter
-    const userId = validateUrlParam("userId", params.id)
+    // Use simple parameter validation
+    const userId = validateSimpleParam("userId", params.id)
 
     // Prevent deleting self
     if (userId === user.id) {
@@ -217,6 +230,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       message: "User deleted successfully" 
     })
   } catch (error) {
+    console.error("Error deleting user:", error)
     return handleApiError(error)
   }
 }
