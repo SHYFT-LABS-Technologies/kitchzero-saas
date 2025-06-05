@@ -60,19 +60,16 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Waste log not found" }, { status: 404 })
     }
 
+    // Parse the waste date
+    const parsedWasteDate = updateData.wasteDate ? new Date(updateData.wasteDate) : existingWasteLog.createdAt
+
+    // Validate that the date is not in the future
+    if (parsedWasteDate > new Date()) {
+      return NextResponse.json({ error: "Waste date cannot be in the future" }, { status: 400 })
+    }
+
     // Super admins can update directly
     if (user.role === "SUPER_ADMIN") {
-      // Parse the provided date or keep existing
-      let updateDate = existingWasteLog.createdAt
-      if (updateData.date) {
-        updateDate = new Date(updateData.date)
-        // If only date is provided (YYYY-MM-DD), preserve original time
-        if (updateData.date.length === 10) {
-          const originalTime = existingWasteLog.createdAt
-          updateDate.setHours(originalTime.getHours(), originalTime.getMinutes(), originalTime.getSeconds(), originalTime.getMilliseconds())
-        }
-      }
-
       const updatedWasteLog = await prisma.wasteLog.update({
         where: { id: wasteLogId },
         data: {
@@ -83,7 +80,8 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
           reason: updateData.reason,
           photo: updateData.photo,
           branchId: updateData.branchId || existingWasteLog.branchId,
-          createdAt: updateDate, // Update the date if provided
+          createdAt: parsedWasteDate, // Update the waste date
+          updatedAt: new Date(), // Keep current timestamp for when it was last modified
         },
         include: {
           branch: {
@@ -95,18 +93,18 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ wasteLog: updatedWasteLog })
     }
 
-    // Branch admins need approval - include date in the new data
+    // Branch admins need approval - include the new date in the review data
     const review = await prisma.wasteLogReview.create({
       data: {
         wasteLogId,
         action: "UPDATE",
         originalData: {
           ...existingWasteLog,
-          date: existingWasteLog.createdAt.toISOString().split('T')[0]
+          wasteDate: existingWasteLog.createdAt.toISOString().split("T")[0],
         },
         newData: {
           ...updateData,
-          date: updateData.date || existingWasteLog.createdAt.toISOString().split('T')[0]
+          wasteDate: parsedWasteDate.toISOString().split("T")[0],
         },
         reason: updateData.reason || "Update request",
         createdBy: user.id,

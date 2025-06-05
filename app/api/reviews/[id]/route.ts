@@ -113,15 +113,7 @@ async function applyReviewChanges(review: any) {
     switch (review.action) {
       case "CREATE":
         if (review.newData) {
-          let createDate = new Date()
-          if (review.newData.date) {
-            createDate = new Date(review.newData.date)
-            // If only date is provided (YYYY-MM-DD), set to current time
-            if (review.newData.date.length === 10) {
-              const now = new Date()
-              createDate.setHours(now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds())
-            }
-          }
+          const wasteDate = review.newData.wasteDate ? new Date(review.newData.wasteDate) : new Date()
           
           await prisma.wasteLog.create({
             data: {
@@ -132,7 +124,8 @@ async function applyReviewChanges(review: any) {
               reason: review.newData.reason,
               branchId: review.newData.branchId,
               photo: review.newData.photo,
-              createdAt: createDate,
+              createdAt: wasteDate,
+              updatedAt: wasteDate,
             },
           })
         }
@@ -140,28 +133,20 @@ async function applyReviewChanges(review: any) {
 
       case "UPDATE":
         if (review.wasteLogId && review.newData) {
-          const updateData: any = {
-            itemName: review.newData.itemName,
-            quantity: review.newData.quantity,
-            unit: review.newData.unit,
-            value: review.newData.value,
-            reason: review.newData.reason,
-            photo: review.newData.photo,
-          }
-          
-          if (review.newData.date) {
-            let updateDate = new Date(review.newData.date)
-            // If only date is provided (YYYY-MM-DD), preserve original time
-            if (review.newData.date.length === 10 && review.originalData) {
-              const originalTime = new Date(review.originalData.createdAt)
-              updateDate.setHours(originalTime.getHours(), originalTime.getMinutes(), originalTime.getSeconds(), originalTime.getMilliseconds())
-            }
-            updateData.createdAt = updateDate
-          }
+          const wasteDate = review.newData.wasteDate ? new Date(review.newData.wasteDate) : new Date()
           
           await prisma.wasteLog.update({
             where: { id: review.wasteLogId },
-            data: updateData,
+            data: {
+              itemName: review.newData.itemName,
+              quantity: review.newData.quantity,
+              unit: review.newData.unit,
+              value: review.newData.value,
+              reason: review.newData.reason,
+              photo: review.newData.photo,
+              createdAt: wasteDate, // Update the waste occurrence date
+              updatedAt: new Date(), // Keep current timestamp for modification time
+            },
           })
         }
         break
