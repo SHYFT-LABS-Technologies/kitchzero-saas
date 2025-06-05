@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { ValidationError } from './validation'
+import { ValidationErrorDetail } from "@/components/ui/toast-notification"
 
 export function handleApiError(error: unknown) {
   console.error('API Error:', error)

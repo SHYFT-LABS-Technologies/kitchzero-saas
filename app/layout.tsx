@@ -2,6 +2,7 @@ import type React from "react"
 import type { Metadata, Viewport } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
+import { ToastProvider } from "@/components/ui/toast-notification"
 
 const inter = Inter({
   subsets: ["latin"],
@@ -43,8 +44,12 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable}>
       <body className={`${inter.className} bg-kitchzero-background text-kitchzero-text antialiased min-h-screen`}>
-        {children}
+        <ToastProvider>
+          {children}
+        </ToastProvider>
       </body>
     </html>
   )
 }
+
+

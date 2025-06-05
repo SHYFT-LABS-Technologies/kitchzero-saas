@@ -7,6 +7,8 @@ import { useAuth } from "@/components/auth-provider"
 import DeleteConfirmationModal from "@/components/ui/delete-confirmation-modal"
 import { ToastContainer, useToast } from "@/components/ui/toast-notification"
 import type { WasteLog, Branch } from "@/lib/types"
+import { api, ApiClientError } from "@/lib/api-client"
+import { FormField } from "@/components/ui/form-field"
 import {
   Plus,
   Trash2,
@@ -172,42 +174,53 @@ export default function WastePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    try {
-      const response = await fetch("/api/waste-logs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      })
 
-      if (response.ok) {
-        const result = await response.json()
-        if (result.requiresApproval) {
-          addToast({
-            type: "info",
-            title: "Submitted for Approval",
-            message: "Your waste log has been submitted and is awaiting super admin approval.",
-          })
-        } else {
-          addToast({
-            type: "success",
-            title: "Waste Log Created",
-            message: "Waste log has been successfully created.",
-          })
-        }
-        setShowForm(false)
-        resetForm()
-        fetchWasteLogs(false) // Don't show refresh toast, we already show create success
-        if (user?.role === "SUPER_ADMIN") {
-          fetchReviews()
-        }
+    try {
+      setLoading(true)
+
+      const response = await api.post('/api/waste-logs', formData)
+
+      if (response.requiresApproval) {
+        addToast({
+          type: "info",
+          title: "Submitted for Approval",
+          message: "Your waste log has been submitted and is awaiting super admin approval.",
+        })
+      } else {
+        addToast({
+          type: "success",
+          title: "Waste Log Created",
+          message: "Waste log has been successfully created.",
+        })
       }
+
+      setShowForm(false)
+      resetForm()
+      fetchWasteLogs()
+
     } catch (error) {
-      console.error("Failed to create waste log:", error)
-      addToast({
-        type: "error",
-        title: "Error",
-        message: "Failed to create waste log. Please try again.",
-      })
+      if (error instanceof ApiClientError) {
+        if (error.details && error.details.length > 0) {
+          // Handle validation errors
+          addValidationErrors(error.details, "Please fix the following errors")
+        } else {
+          // Handle other API errors
+          addToast({
+            type: "error",
+            title: "Error",
+            message: error.error
+          })
+        }
+      } else {
+        // Handle unexpected errors
+        addToast({
+          type: "error",
+          title: "Network Error",
+          message: "Failed to submit. Please try again."
+        })
+      }
+    } finally {
+      setLoading(false)
     }
   }
 
