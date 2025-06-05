@@ -62,6 +62,17 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
 
     // Super admins can update directly
     if (user.role === "SUPER_ADMIN") {
+      // Parse the provided date or keep existing
+      let updateDate = existingWasteLog.createdAt
+      if (updateData.date) {
+        updateDate = new Date(updateData.date)
+        // If only date is provided (YYYY-MM-DD), preserve original time
+        if (updateData.date.length === 10) {
+          const originalTime = existingWasteLog.createdAt
+          updateDate.setHours(originalTime.getHours(), originalTime.getMinutes(), originalTime.getSeconds(), originalTime.getMilliseconds())
+        }
+      }
+
       const updatedWasteLog = await prisma.wasteLog.update({
         where: { id: wasteLogId },
         data: {
@@ -72,6 +83,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
           reason: updateData.reason,
           photo: updateData.photo,
           branchId: updateData.branchId || existingWasteLog.branchId,
+          createdAt: updateDate, // Update the date if provided
         },
         include: {
           branch: {
@@ -83,13 +95,19 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ wasteLog: updatedWasteLog })
     }
 
-    // Branch admins need approval
+    // Branch admins need approval - include date in the new data
     const review = await prisma.wasteLogReview.create({
       data: {
         wasteLogId,
         action: "UPDATE",
-        originalData: existingWasteLog,
-        newData: updateData,
+        originalData: {
+          ...existingWasteLog,
+          date: existingWasteLog.createdAt.toISOString().split('T')[0]
+        },
+        newData: {
+          ...updateData,
+          date: updateData.date || existingWasteLog.createdAt.toISOString().split('T')[0]
+        },
         reason: updateData.reason || "Update request",
         createdBy: user.id,
       },
@@ -143,7 +161,10 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       data: {
         wasteLogId,
         action: "DELETE",
-        originalData: existingWasteLog,
+        originalData: {
+          ...existingWasteLog,
+          date: existingWasteLog.createdAt.toISOString().split('T')[0]
+        },
         reason: reason || "Delete request",
         createdBy: user.id,
       },

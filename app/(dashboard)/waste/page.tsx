@@ -91,6 +91,7 @@ export default function WastePage() {
     reason: "SPOILAGE",
     branchId: "",
     photo: "",
+    date: "",
   })
 
   useEffect(() => {
@@ -100,6 +101,14 @@ export default function WastePage() {
       fetchReviews()
     }
   }, [user])
+
+  // Set today's date as default when form opens
+  useEffect(() => {
+    if (showForm && !editingLog) {
+      const today = new Date().toISOString().split('T')[0]
+      setFormData(prev => ({ ...prev, date: today }))
+    }
+  }, [showForm, editingLog])
 
   const fetchWasteLogs = async () => {
     setLoading(true)
@@ -316,6 +325,7 @@ export default function WastePage() {
   }
 
   const resetForm = () => {
+    const today = new Date().toISOString().split('T')[0]
     setFormData({
       itemName: "",
       quantity: "",
@@ -324,11 +334,13 @@ export default function WastePage() {
       reason: "SPOILAGE",
       branchId: "",
       photo: "",
+      date: today,
     })
   }
 
   const openEditForm = (wasteLog: WasteLogWithBranch) => {
     setEditingLog(wasteLog)
+    const logDate = new Date(wasteLog.createdAt).toISOString().split('T')[0]
     setFormData({
       itemName: wasteLog.itemName,
       quantity: wasteLog.quantity.toString(),
@@ -337,6 +349,7 @@ export default function WastePage() {
       reason: wasteLog.reason,
       branchId: wasteLog.branchId,
       photo: wasteLog.photo || "",
+      date: logDate,
     })
     setShowForm(true)
   }
@@ -531,7 +544,9 @@ export default function WastePage() {
               <p className="text-sm font-medium text-kitchzero-text/70">Avg per Entry</p>
               <p className="text-2xl font-bold text-kitchzero-text">
                 {wasteLogs.length > 0
-                  ? (wasteLogs.reduce((sum, log) => sum + log.value, 0) / wasteLogs.length).toLocaleString("en-LK", {
+                  ? (wasteLogs// Continue from previous code...
+
+                  .reduce((sum, log) => sum + log.value, 0) / wasteLogs.length).toLocaleString("en-LK", {
                       style: "currency",
                       currency: "LKR",
                       minimumFractionDigits: 0,
@@ -893,6 +908,17 @@ export default function WastePage() {
                   </select>
                 </div>
 
+                <div>
+                  <label className="block text-sm font-semibold text-kitchzero-text mb-2">Date *</label>
+                  <input
+                    type="date"
+                    value={formData.date}
+                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                    className="input"
+                    required
+                  />
+                </div>
+
                 {user?.role === "SUPER_ADMIN" && (
                   <div>
                     <label className="block text-sm font-semibold text-kitchzero-text mb-2">Branch *</label>
@@ -1139,8 +1165,7 @@ export default function WastePage() {
             </div>
           </div>
         </div>
-      )}\
+      )}
     </div>
-
   )
 }
