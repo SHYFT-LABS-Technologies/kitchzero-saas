@@ -6,7 +6,7 @@ import {
   handleApiError, 
   validateAndParseBody, 
   validateUrlParam,
-  checkRateLimit,
+  checkRateLimitEnhanced,
   checkPermission 
 } from "@/lib/api-utils"
 
@@ -18,13 +18,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
 
     // Rate limiting
-    const clientIp = request.ip || 'unknown'
-    if (!checkRateLimit(`review-get:${clientIp}`, 60, 60000)) {
-      return NextResponse.json(
-        { error: "Too many requests. Please try again later." },
-        { status: 429 }
-      )
-    }
+    await checkRateLimitEnhanced(request, user, 'api_read');
 
     // Validate ID parameter
     const reviewId = validateUrlParam("reviewId", params.id)
@@ -85,13 +79,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     }
 
     // Rate limiting
-    const clientIp = request.ip || 'unknown'
-    if (!checkRateLimit(`review-update:${clientIp}`, 20, 60000)) {
-      return NextResponse.json(
-        { error: "Too many requests. Please try again later." },
-        { status: 429 }
-      )
-    }
+    await checkRateLimitEnhanced(request, user, 'api_write');
 
     // Validate ID parameter
     const reviewId = validateUrlParam("reviewId", params.id)

@@ -1,13 +1,16 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getAuthUser } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
+import { checkRateLimitEnhanced, handleApiError } from "@/lib/api-utils" // Added imports
 
 export async function GET(request: NextRequest) {
   try {
     const user = await getAuthUser(request)
-    if (!user || user.role !== "SUPER_ADMIN") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    if (!user || user.role !== "SUPER_ADMIN") { // Assuming only SUPER_ADMIN can access all reviews
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
+
+    await checkRateLimitEnhanced(request, user, 'api_read');
 
     const { searchParams } = new URL(request.url)
     const status = searchParams.get("status")
@@ -45,7 +48,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ reviews })
   } catch (error) {
-    console.error("Reviews fetch error:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    // Use handleApiError for consistent error handling
+    return handleApiError(error)
   }
 }

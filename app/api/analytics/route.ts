@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getAuthUser } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { analyticsQuerySchema } from "@/lib/validation"
-import { handleApiError, validateQueryParams, checkRateLimit } from "@/lib/api-utils"
+import { handleApiError, validateQueryParams, checkRateLimitEnhanced } from "@/lib/api-utils"
 
 export async function GET(request: NextRequest) {
   try {
@@ -12,13 +12,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Rate limiting
-    const clientIp = request.ip || 'unknown'
-    if (!checkRateLimit(`analytics:${clientIp}`, 30, 60000)) { // 30 requests per minute
-      return NextResponse.json(
-        { error: "Too many requests. Please try again later." },
-        { status: 429 }
-      )
-    }
+    await checkRateLimitEnhanced(request, user, 'analytics');
 
     // Validate query parameters using utils
     const { searchParams } = new URL(request.url)

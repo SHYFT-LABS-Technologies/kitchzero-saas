@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getAuthUser, hashPassword } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { handleApiError, checkRateLimit } from "@/lib/api-utils"
+import { handleApiError, checkRateLimitEnhanced } from "@/lib/api-utils"
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,13 +10,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
-    const clientIp = request.ip || 'unknown'
-    if (!checkRateLimit(`users-get:${clientIp}`, 60, 60000)) {
-      return NextResponse.json(
-        { error: "Too many requests. Please try again later." },
-        { status: 429 }
-      )
-    }
+    await checkRateLimitEnhanced(request, user, 'api_read');
 
     const users = await prisma.user.findMany({
       select: {
@@ -50,13 +44,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
     }
 
-    const clientIp = request.ip || 'unknown'
-    if (!checkRateLimit(`users-create:${clientIp}`, 20, 60000)) {
-      return NextResponse.json(
-        { error: "Too many requests. Please try again later." },
-        { status: 429 }
-      )
-    }
+    await checkRateLimitEnhanced(request, user, 'api_write');
 
     // Get request body
     const body = await request.json()

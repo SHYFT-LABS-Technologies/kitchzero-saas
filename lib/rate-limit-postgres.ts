@@ -119,16 +119,30 @@ export class PostgreSQLRateLimiter {
 export const pgRateLimiter = new PostgreSQLRateLimiter()
 
 // Rate limit configurations
+// Each key represents an endpoint category or a specific action.
+// `requests`: max requests allowed in the `window`.
+// `window`: time window in milliseconds.
+// `endpoint`: unique string identifier for the endpoint category, used in the database.
 export const rateLimitConfigs = {
+  // For user login attempts.
   login: { requests: 5, window: 15 * 60 * 1000, endpoint: 'login' },
+  // For refresh token exchange attempts.
   refresh: { requests: 10, window: 5 * 60 * 1000, endpoint: 'refresh' },
+  // Default for most GET requests (reading data).
   api_read: { requests: 100, window: 60 * 1000, endpoint: 'api_read' },
+  // Default for most POST/PUT requests (creating/updating data).
   api_write: { requests: 50, window: 60 * 1000, endpoint: 'api_write' },
+  // Default for most DELETE requests.
   api_delete: { requests: 20, window: 60 * 1000, endpoint: 'api_delete' },
+  // Higher limit for Super Admin GET requests.
   admin_read: { requests: 300, window: 60 * 1000, endpoint: 'admin_read' },
+  // Higher limit for Super Admin POST/PUT requests.
   admin_write: { requests: 150, window: 60 * 1000, endpoint: 'admin_write' },
+  // Higher limit for Super Admin DELETE requests.
   admin_delete: { requests: 50, window: 60 * 1000, endpoint: 'admin_delete' },
+  // Specific limit for analytics data fetching.
   analytics: { requests: 30, window: 60 * 1000, endpoint: 'analytics' },
+  // Specific limit for data export operations.
   export: { requests: 5, window: 5 * 60 * 1000, endpoint: 'export' },
 }
 

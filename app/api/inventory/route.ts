@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getAuthUser } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { inventorySchema } from "@/lib/validation"
-import { handleApiError } from "@/lib/api-utils"
+import { handleApiError, checkRateLimitEnhanced } from "@/lib/api-utils"
 
 export async function GET(request: NextRequest) {
   try {
@@ -10,6 +10,8 @@ export async function GET(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    await checkRateLimitEnhanced(request, user, 'api_read');
 
     const whereClause = user.role === "SUPER_ADMIN" ? {} : { branchId: user.branchId }
 
@@ -35,6 +37,8 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    await checkRateLimitEnhanced(request, user, 'api_write');
 
     // Get and validate request body
     const body = await request.json()

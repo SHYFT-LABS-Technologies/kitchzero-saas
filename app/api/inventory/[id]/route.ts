@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getAuthUser } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { handleApiError } from "@/lib/api-utils"
+import { handleApiError, checkRateLimitEnhanced } from "@/lib/api-utils"
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -9,6 +9,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    await checkRateLimitEnhanced(request, user, 'api_read');
 
     const inventoryId = params.id
     if (!inventoryId) {
@@ -45,6 +47,8 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    await checkRateLimitEnhanced(request, user, 'api_write');
 
     const inventoryId = params.id
     if (!inventoryId) {
@@ -146,6 +150,8 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    await checkRateLimitEnhanced(request, user, 'api_delete');
 
     const inventoryId = params.id
     if (!inventoryId) {

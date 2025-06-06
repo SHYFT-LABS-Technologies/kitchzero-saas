@@ -6,7 +6,7 @@ import {
   handleApiError, 
   validateAndParseBody, 
   validateUrlParam,
-  checkRateLimit,
+  checkRateLimitEnhanced,
   checkPermission 
 } from "@/lib/api-utils"
 
@@ -18,13 +18,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     }
 
     // Rate limiting
-    const clientIp = request.ip || 'unknown'
-    if (!checkRateLimit(`waste-log-get:${clientIp}`, 60, 60000)) {
-      return NextResponse.json(
-        { error: "Too many requests. Please try again later." },
-        { status: 429 }
-      )
-    }
+    await checkRateLimitEnhanced(request, user, 'api_read');
 
     // Validate ID parameter
     const wasteLogId = validateUrlParam("wasteLogId", params.id)
@@ -61,13 +55,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     }
 
     // Rate limiting
-    const clientIp = request.ip || 'unknown'
-    if (!checkRateLimit(`waste-log-update:${clientIp}`, 20, 60000)) {
-      return NextResponse.json(
-        { error: "Too many requests. Please try again later." },
-        { status: 429 }
-      )
-    }
+    await checkRateLimitEnhanced(request, user, 'api_write');
 
     // Validate ID parameter
     const wasteLogId = validateUrlParam("wasteLogId", params.id)
@@ -169,13 +157,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     }
 
     // Rate limiting
-    const clientIp = request.ip || 'unknown'
-    if (!checkRateLimit(`waste-log-delete:${clientIp}`, 10, 60000)) {
-      return NextResponse.json(
-        { error: "Too many requests. Please try again later." },
-        { status: 429 }
-      )
-    }
+    await checkRateLimitEnhanced(request, user, 'api_delete');
 
     // Validate ID parameter
     const wasteLogId = validateUrlParam("wasteLogId", params.id)

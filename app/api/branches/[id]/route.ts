@@ -6,7 +6,7 @@ import {
   handleApiError, 
   validateAndParseBody, 
   validateSimpleParam, // Use simple validation instead
-  checkRateLimit,
+  checkRateLimitEnhanced,
   checkPermission 
 } from "@/lib/api-utils"
 
@@ -21,13 +21,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const clientIp = request.ip || 'unknown'
-    if (!checkRateLimit(`branch-get:${clientIp}`, 60, 60000)) {
-      return NextResponse.json(
-        { error: "Too many requests. Please try again later." },
-        { status: 429 }
-      )
-    }
+    await checkRateLimitEnhanced(request, user, 'api_read');
 
     const branchId = validateSimpleParam("branchId", params.id)
 
@@ -64,13 +58,7 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const clientIp = request.ip || 'unknown'
-    if (!checkRateLimit(`branch-update:${clientIp}`, 20, 60000)) {
-      return NextResponse.json(
-        { error: "Too many requests. Please try again later." },
-        { status: 429 }
-      )
-    }
+    await checkRateLimitEnhanced(request, user, 'api_write');
 
     const branchId = validateSimpleParam("branchId", params.id)
 
@@ -154,13 +142,7 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const clientIp = request.ip || 'unknown'
-    if (!checkRateLimit(`branch-delete:${clientIp}`, 10, 60000)) {
-      return NextResponse.json(
-        { error: "Too many requests. Please try again later." },
-        { status: 429 }
-      )
-    }
+    await checkRateLimitEnhanced(request, user, 'api_delete');
 
     const branchId = validateSimpleParam("branchId", params.id)
 
