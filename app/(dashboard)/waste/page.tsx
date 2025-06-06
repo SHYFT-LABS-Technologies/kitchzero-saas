@@ -1020,68 +1020,86 @@ export default function WastePage() {
 
       {/* Enhanced Add/Edit Form Modal */}
       {showForm && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
-              <h2 className="text-2xl font-bold text-kitchzero-text">
-                {editingLog ? "Edit Waste Entry" : "Log New Waste Entry"}
-              </h2>
-              <p className="text-kitchzero-text/70 mt-1">
-                {editingLog && user?.role === "BRANCH_ADMIN"
-                  ? "Changes will require super admin approval"
-                  : "Record food waste details for tracking and analysis"}
-              </p>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="relative bg-gradient-to-r from-slate-800 to-slate-900 p-6 text-white">
+              <button
+                onClick={() => {
+                  setShowForm(false)
+                  setEditingLog(null)
+                  resetForm()
+                }}
+                className="absolute top-4 right-4 p-2 hover:bg-white/20 rounded-xl transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                  <Trash2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold">
+                    {editingLog ? "Edit Waste Entry" : "Log New Waste Entry"}
+                  </h2>
+                  <p className="text-white/80 text-sm mt-1">
+                    {editingLog && user?.role === "BRANCH_ADMIN"
+                      ? "Changes will require super admin approval"
+                      : "Record food waste details for tracking and analysis"}
+                  </p>
+                </div>
+              </div>
             </div>
 
             <form onSubmit={editingLog ? handleEdit : handleSubmit} className="p-6 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div>
-                  <label className="block text-sm font-semibold text-kitchzero-text mb-2">Item Name *</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Item Name *</label>
                   <input
                     type="text"
                     value={formData.itemName}
                     onChange={(e) => setFormData({ ...formData, itemName: e.target.value })}
-                    className="input"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200 text-sm"
                     placeholder="e.g., Rice, Chicken, Vegetables"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-kitchzero-text mb-2">Waste Date *</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Waste Date *</label>
                   <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 w-4 h-4" />
                     <input
                       type="date"
                       value={formData.wasteDate}
                       onChange={(e) => setFormData({ ...formData, wasteDate: e.target.value })}
-                      className="input pl-10"
+                      className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200 text-sm"
                       max={new Date().toISOString().split("T")[0]} // Prevent future dates
                       required
                     />
                   </div>
-                  <p className="text-xs text-kitchzero-text/50 mt-1">When did the waste occur?</p>
+                  <p className="text-xs text-slate-500 mt-1">When did the waste occur?</p>
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-kitchzero-text mb-2">Quantity *</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Quantity *</label>
                   <input
                     type="number"
                     step="0.1"
                     value={formData.quantity}
                     onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-                    className="input"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200 text-sm"
                     placeholder="0.0"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-kitchzero-text mb-2">Unit *</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Unit *</label>
                   <select
                     value={formData.unit}
                     onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                    className="select"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200 text-sm"
                   >
                     <option value="kg">Kilograms (kg)</option>
                     <option value="g">Grams (g)</option>
@@ -1092,24 +1110,24 @@ export default function WastePage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-kitchzero-text mb-2">Value (LKR) *</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Value (LKR) *</label>
                   <input
                     type="number"
                     step="0.01"
                     value={formData.value}
                     onChange={(e) => setFormData({ ...formData, value: e.target.value })}
-                    className="input"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200 text-sm"
                     placeholder="0.00"
                     required
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-kitchzero-text mb-2">Waste Reason *</label>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Waste Reason *</label>
                   <select
                     value={formData.reason}
                     onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                    className="select"
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200 text-sm"
                   >
                     <option value="SPOILAGE">Spoilage</option>
                     <option value="OVERPRODUCTION">Overproduction</option>
@@ -1120,11 +1138,11 @@ export default function WastePage() {
 
                 {user?.role === "SUPER_ADMIN" && (
                   <div>
-                    <label className="block text-sm font-semibold text-kitchzero-text mb-2">Branch *</label>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Branch *</label>
                     <select
                       value={formData.branchId}
                       onChange={(e) => setFormData({ ...formData, branchId: e.target.value })}
-                      className="select"
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200 text-sm"
                       required
                     >
                       <option value="">Select Branch</option>
@@ -1139,18 +1157,18 @@ export default function WastePage() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-kitchzero-text mb-2">Photo URL (Optional)</label>
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Photo URL (Optional)</label>
                 <input
                   type="url"
                   value={formData.photo}
                   onChange={(e) => setFormData({ ...formData, photo: e.target.value })}
-                  className="input"
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200 text-sm"
                   placeholder="https://example.com/photo.jpg"
                 />
-                <p className="text-xs text-kitchzero-text/50 mt-1">Add a photo URL to document the waste</p>
+                <p className="text-xs text-slate-500 mt-1">Add a photo URL to document the waste</p>
               </div>
 
-              <div className="flex justify-end space-x-4 pt-6 border-t border-gray-200">
+              <div className="flex justify-end space-x-4 pt-6 border-t border-slate-200">
                 <button
                   type="button"
                   onClick={() => {
@@ -1158,12 +1176,16 @@ export default function WastePage() {
                     setEditingLog(null)
                     resetForm()
                   }}
-                  className="px-6 py-2 border border-kitchzero-border rounded-lg hover:bg-gray-50 transition-colors font-medium"
+                  className="px-6 py-3 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors font-medium text-slate-700"
                 >
                   Cancel
                 </button>
-                <button type="submit" className="btn-primary px-8">
-                  {editingLog ? "Update Entry" : "Log Waste Entry"}
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="px-8 py-3 bg-gradient-to-r from-kitchzero-primary to-kitchzero-secondary text-white rounded-xl hover:from-kitchzero-primary/90 hover:to-kitchzero-secondary/90 transition-all duration-200 font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? "Processing..." : (editingLog ? "Update Entry" : "Log Waste Entry")}
                 </button>
               </div>
             </form>
