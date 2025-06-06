@@ -128,6 +128,55 @@ export async function validateAndParseBody<T>(
   }
 }
 
+// Add missing validation functions
+export function checkRateLimit(key: string, limit: number, windowMs: number): boolean {
+  // Simple in-memory rate limiting for development
+  const now = Date.now()
+  const windowStart = Math.floor(now / windowMs) * windowMs
+  
+  if (!global.rateLimitStore) {
+    global.rateLimitStore = new Map()
+  }
+  
+  const currentCount = global.rateLimitStore.get(`${key}:${windowStart}`) || 0
+  
+  if (currentCount >= limit) {
+    return false
+  }
+  
+  global.rateLimitStore.set(`${key}:${windowStart}`, currentCount + 1)
+  
+  // Clean up old entries
+  setTimeout(() => {
+    global.rateLimitStore.delete(`${key}:${windowStart}`)
+  }, windowMs)
+  
+  return true
+}
+
+export function checkPermission(userRole: string, requiredRole: string): boolean {
+  if (requiredRole === "SUPER_ADMIN") {
+    return userRole === "SUPER_ADMIN"
+  }
+  return userRole === "SUPER_ADMIN" || userRole === requiredRole
+}
+
+export function validateSimpleParam(paramName: string, paramValue: string): string {
+  if (!paramValue || typeof paramValue !== 'string' || paramValue.trim() === '') {
+    throw new ValidationError(`${paramName} is required`, [
+      {
+        code: 'invalid_type',
+        expected: 'string',
+        received: 'undefined',
+        path: [paramName],
+        message: `${paramName} is required`
+      }
+    ])
+  }
+  
+  return paramValue.trim()
+}
+
 // Enhanced rate limiting
 export async function checkRateLimitEnhanced(
   request: Request,
@@ -335,4 +384,10 @@ export function validateUrlParam(paramName: string, paramValue: string): string 
   }
   
   return paramValue
+}
+
+// Add missing function for validation errors
+export function addValidationErrors(details: ValidationErrorDetail[], title: string) {
+  // This would be implemented by the calling component
+  console.error(title, details)
 }

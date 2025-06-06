@@ -1,13 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { getAuthUser } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { updateInventorySchema } from "@/lib/validation"
-import { 
-  handleApiError, 
-  validateAndParseBody, 
-  validateUrlParam,
-  checkRateLimit 
-} from "@/lib/api-utils"
+import { handleApiError } from "@/lib/api-utils"
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -16,17 +10,10 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Rate limiting
-    const clientIp = request.ip || 'unknown'
-    if (!checkRateLimit(`inventory-get:${clientIp}`, 60, 60000)) {
-      return NextResponse.json(
-        { error: "Too many requests. Please try again later." },
-        { status: 429 }
-      )
+    const inventoryId = params.id
+    if (!inventoryId) {
+      return NextResponse.json({ error: "Inventory ID is required" }, { status: 400 })
     }
-
-    // Validate ID parameter
-    const inventoryId = validateUrlParam("inventoryId", params.id)
 
     const whereClause = user.role === "SUPER_ADMIN" ? {} : { branchId: user.branchId }
 
@@ -59,20 +46,14 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Rate limiting
-    const clientIp = request.ip || 'unknown'
-    if (!checkRateLimit(`inventory-update:${clientIp}`, 30, 60000)) {
-      return NextResponse.json(
-        { error: "Too many requests. Please try again later." },
-        { status: 429 }
-      )
+    const inventoryId = params.id
+    if (!inventoryId) {
+      return NextResponse.json({ error: "Inventory ID is required" }, { status: 400 })
     }
 
-    // Validate ID parameter
-    const inventoryId = validateUrlParam("inventoryId", params.id)
-
-    // Validate request body
-    const validatedData = await validateAndParseBody(request, updateInventorySchema)
+    // Get and validate request body
+    const body = await request.json()
+    console.log("Inventory update request:", body)
 
     // Check if item exists and user has permission
     const existingItem = await prisma.inventory.findFirst({
@@ -89,15 +70,52 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     // Build update data object, only including provided fields
     const updateData: any = {}
 
-    if (validatedData.itemName !== undefined) updateData.itemName = validatedData.itemName
-    if (validatedData.quantity !== undefined) updateData.quantity = validatedData.quantity
-    if (validatedData.unit !== undefined) updateData.unit = validatedData.unit
-    if (validatedData.expiryDate !== undefined) updateData.expiryDate = new Date(validatedData.expiryDate)
-    if (validatedData.purchaseCost !== undefined) updateData.purchaseCost = validatedData.purchaseCost
+    if (body.itemName !== undefined) {
+      if (!body.itemName || body.itemName.trim().length === 0) {
+        return NextResponse.json({ error: "Item name cannot be empty" }, { status: 400 })
+      }
+      updateData.itemName = body.itemName.trim()
+    }
+
+    if (body.quantity !== undefined) {
+      if (isNaN(Number(body.quantity)) || Number(body.quantity) <= 0) {
+        return NextResponse.json({ error: "Valid quantity is required" }, { status: 400 })
+      }
+      updateData.quantity = Number(body.quantity)
+    }
+
+    if (body.unit !== undefined) {
+      if (!['kg', 'g', 'pieces', 'liters'].includes(body.unit)) {
+        return NextResponse.json({ error: "Valid unit is required" }, { status: 400 })
+      }
+      updateData.unit = body.unit
+    }
+
+    if (body.expiryDate !== undefined) {
+      const expiryDate = new Date(body.expiryDate)
+      if (isNaN(expiryDate.getTime())) {
+        return NextResponse.json({ error: "Invalid expiry date" }, { status: 400 })
+      }
+      updateData.expiryDate = expiryDate
+    }
+
+    if (body.purchaseCost !== undefined) {
+      if (isNaN(Number(body.purchaseCost)) || Number(body.purchaseCost) <= 0) {
+        return NextResponse.json({ error: "Valid purchase cost is required" }, { status: 400 })
+      }
+      updateData.purchaseCost = Number(body.purchaseCost)
+    }
     
     // Only super admins can change branch assignment
-    if (validatedData.branchId !== undefined && user.role === "SUPER_ADMIN") {
-      updateData.branchId = validatedData.branchId
+    if (body.branchId !== undefined && user.role === "SUPER_ADMIN") {
+      const branchExists = await prisma.branch.findUnique({
+        where: { id: body.branchId }
+      })
+
+      if (!branchExists) {
+        return NextResponse.json({ error: "Selected branch does not exist" }, { status: 400 })
+      }
+      updateData.branchId = body.branchId
     }
 
     const updatedItem = await prisma.inventory.update({
@@ -110,11 +128,14 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
       },
     })
 
+    console.log("Inventory item updated:", updatedItem)
+
     return NextResponse.json({ 
       inventoryItem: updatedItem,
       message: "Inventory item updated successfully"
     })
   } catch (error) {
+    console.error("Error updating inventory item:", error)
     return handleApiError(error)
   }
 }
@@ -126,17 +147,10 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Rate limiting
-    const clientIp = request.ip || 'unknown'
-    if (!checkRateLimit(`inventory-delete:${clientIp}`, 20, 60000)) {
-      return NextResponse.json(
-        { error: "Too many requests. Please try again later." },
-        { status: 429 }
-      )
+    const inventoryId = params.id
+    if (!inventoryId) {
+      return NextResponse.json({ error: "Inventory ID is required" }, { status: 400 })
     }
-
-    // Validate ID parameter
-    const inventoryId = validateUrlParam("inventoryId", params.id)
 
     // Check if item exists and user has permission
     const existingItem = await prisma.inventory.findFirst({
@@ -154,10 +168,13 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
       where: { id: inventoryId },
     })
 
+    console.log("Inventory item deleted:", inventoryId)
+
     return NextResponse.json({ 
       message: "Inventory item deleted successfully" 
     })
   } catch (error) {
+    console.error("Error deleting inventory item:", error)
     return handleApiError(error)
   }
 }

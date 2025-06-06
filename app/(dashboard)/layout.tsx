@@ -5,6 +5,7 @@ import { useEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { AuthProvider, useAuth } from "@/components/auth-provider"
 import Navigation from "@/components/navigation"
+import { ErrorBoundary } from "@/components/ui/error-boundary"
 
 function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -56,7 +57,11 @@ function DashboardLayoutContent({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-kitchzero-background">
       <Navigation />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">{children}</main>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <ErrorBoundary>
+          {children}
+        </ErrorBoundary>
+      </main>
     </div>
   )
 }

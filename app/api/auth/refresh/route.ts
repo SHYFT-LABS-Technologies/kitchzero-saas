@@ -6,7 +6,8 @@ import {
   createSecureErrorResponse,
   logRequest,
   auditLog,
-  checkRateLimitEnhanced
+  checkRateLimitEnhanced,
+  handleApiError // Add this import
 } from "@/lib/api-utils"
 
 export async function POST(request: NextRequest) {

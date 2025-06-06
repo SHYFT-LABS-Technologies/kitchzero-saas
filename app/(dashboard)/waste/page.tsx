@@ -113,17 +113,20 @@ export default function WastePage() {
   }, [user])
 
   const fetchWasteLogs = async (showToast = false) => {
-    setLoading(true)
     try {
+      setLoading(true)
       const response = await fetch("/api/waste-logs", {
         cache: 'no-store',
         headers: {
           'Cache-Control': 'no-cache',
         },
       })
+
       if (response.ok) {
         const data = await response.json()
-        setWasteLogs(data.wasteLogs)
+        // Ensure wasteLogs is always an array
+        const wasteLogsArray = Array.isArray(data.wasteLogs) ? data.wasteLogs : []
+        setWasteLogs(wasteLogsArray)
 
         // Only show toast if explicitly requested (manual refresh)
         if (showToast) {
@@ -138,6 +141,8 @@ export default function WastePage() {
       }
     } catch (error) {
       console.error("Failed to fetch waste logs:", error)
+      // Set empty array on error to prevent reduce issues
+      setWasteLogs([])
       addToast({
         type: "error",
         title: "Error",
@@ -153,10 +158,11 @@ export default function WastePage() {
       const response = await fetch("/api/branches")
       if (response.ok) {
         const data = await response.json()
-        setBranches(data.branches)
+        setBranches(Array.isArray(data.branches) ? data.branches : [])
       }
     } catch (error) {
       console.error("Failed to fetch branches:", error)
+      setBranches([])
     }
   }
 
@@ -165,10 +171,11 @@ export default function WastePage() {
       const response = await fetch("/api/reviews?status=PENDING")
       if (response.ok) {
         const data = await response.json()
-        setReviews(data.reviews)
+        setReviews(Array.isArray(data.reviews) ? data.reviews : [])
       }
     } catch (error) {
       console.error("Failed to fetch reviews:", error)
+      setReviews([])
     }
   }
 
@@ -427,24 +434,48 @@ export default function WastePage() {
     }
   }
 
-  // Filter and sort waste logs
-  const filteredWasteLogs = wasteLogs
-    .filter((log) => {
-      const matchesSearch = log.itemName.toLowerCase().includes(searchTerm.toLowerCase())
-      const matchesReason = !filterReason || log.reason === filterReason
-      const matchesBranch = !filterBranch || log.branchId === filterBranch
-      return matchesSearch && matchesReason && matchesBranch
-    })
-    .sort((a, b) => {
-      const aValue = a[sortBy as keyof WasteLogWithBranch]
-      const bValue = b[sortBy as keyof WasteLogWithBranch]
+  // Safe stats calculation with array checks
+  const stats = {
+    total: Array.isArray(wasteLogs) ? wasteLogs.length : 0,
+    totalWaste: Array.isArray(wasteLogs) ? wasteLogs.reduce((sum, log) => sum + (Number(log.quantity) || 0), 0) : 0,
+    totalValue: Array.isArray(wasteLogs) ? wasteLogs.reduce((sum, log) => sum + (Number(log.value) || 0), 0) : 0,
+    averageValue: (() => {
+      if (!Array.isArray(wasteLogs) || wasteLogs.length === 0) return 0;
+      const totalValue = wasteLogs.reduce((sum, log) => sum + (Number(log.value) || 0), 0);
+      return totalValue / wasteLogs.length;
+    })()
+  }
 
-      if (sortOrder === "asc") {
-        return aValue > bValue ? 1 : -1
-      } else {
-        return aValue < bValue ? 1 : -1
-      }
+  // Filter and sort waste logs safely
+  const filteredWasteLogs = Array.isArray(wasteLogs)
+    ? wasteLogs
+      .filter((log) => {
+        const matchesSearch = log.itemName.toLowerCase().includes(searchTerm.toLowerCase())
+        const matchesReason = !filterReason || log.reason === filterReason
+        const matchesBranch = !filterBranch || log.branchId === filterBranch
+        return matchesSearch && matchesReason && matchesBranch
+      })
+      .sort((a, b) => {
+        const aValue = a[sortBy as keyof WasteLogWithBranch]
+        const bValue = b[sortBy as keyof WasteLogWithBranch]
+
+        if (sortOrder === "asc") {
+          return aValue > bValue ? 1 : -1
+        } else {
+          return aValue < bValue ? 1 : -1
+        }
+      })
+    : []
+
+  const addValidationErrors = (details: any[], title: string) => {
+    details.forEach(detail => {
+      addToast({
+        type: "error",
+        title: title,
+        message: `${detail.field}: ${detail.message}`,
+      })
     })
+  }
 
   if (loading) {
     return (
@@ -506,7 +537,7 @@ export default function WastePage() {
                   {loading ? 'Refreshing...' : 'Refresh'}
                 </button>
 
-                {user?.role === "SUPER_ADMIN" && reviews.length > 0 && (
+                {user?.role === "SUPER_ADMIN" && Array.isArray(reviews) && reviews.length > 0 && (
                   <button
                     onClick={() => setShowReviews(true)}
                     className="relative inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 hover:border-amber-300 transition-all duration-200 font-medium text-sm shadow-sm hover:shadow-md"
@@ -542,7 +573,7 @@ export default function WastePage() {
                   <FileText className="w-6 h-6 text-white" />
                 </div>
                 <div className="text-right">
-                  <div className="text-2xl font-bold text-slate-900">{wasteLogs.length}</div>
+                  <div className="text-2xl font-bold text-slate-900">{stats.total}</div>
                   <div className="text-xs text-slate-500 font-medium">ENTRIES</div>
                 </div>
               </div>
@@ -564,7 +595,7 @@ export default function WastePage() {
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-slate-900">
-                    {wasteLogs.reduce((sum, log) => sum + log.quantity, 0).toFixed(1)}
+                    {stats.totalWaste.toFixed(1)}
                   </div>
                   <div className="text-xs text-slate-500 font-medium">KG</div>
                 </div>
@@ -587,14 +618,12 @@ export default function WastePage() {
                 </div>
                 <div className="text-right">
                   <div className="text-lg font-bold text-slate-900">
-                    {wasteLogs
-                      .reduce((sum, log) => sum + log.value, 0)
-                      .toLocaleString("en-LK", {
-                        style: "currency",
-                        currency: "LKR",
-                        minimumFractionDigits: 0,
-                        maximumFractionDigits: 0,
-                      })}
+                    {new Intl.NumberFormat("en-LK", {
+                      style: "currency",
+                      currency: "LKR",
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 0,
+                    }).format(stats.totalValue)}
                   </div>
                   <div className="text-xs text-slate-500 font-medium">VALUE</div>
                 </div>
@@ -617,14 +646,12 @@ export default function WastePage() {
                 </div>
                 <div className="text-right">
                   <div className="text-lg font-bold text-slate-900">
-                    {wasteLogs.length > 0
-                      ? (wasteLogs.reduce((sum, log) => sum + log.value, 0) / wasteLogs.length).toLocaleString("en-LK", {
-                        style: "currency",
-                        currency: "LKR",
-                        minimumFractionDigits: 0,
-                        maximumFractionDigits: 0,
-                      })
-                      : "LKR 0"}
+                    {new Intl.NumberFormat("en-LK", {
+                      style: "currency",
+                      currency: "LKR",
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 0,
+                    }).format(stats.averageValue)}
                   </div>
                   <div className="text-xs text-slate-500 font-medium">AVG</div>
                 </div>
@@ -731,7 +758,7 @@ export default function WastePage() {
                           className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200"
                         >
                           <option value="">All Branches</option>
-                          {branches.map((branch) => (
+                          {Array.isArray(branches) && branches.map((branch) => (
                             <option key={branch.id} value={branch.id}>
                               {branch.name}
                             </option>
@@ -864,17 +891,18 @@ export default function WastePage() {
                     </td>
 
                     <td className="py-5 px-6">
-                      <div className="text-lg font-bold text-slate-900">{log.quantity}</div>
+                      <div className="text-lg font-bold text-slate-900">{Number(log.quantity).toFixed(1)}</div>
                       <div className="text-xs text-slate-500 font-medium">{log.unit}</div>
                     </td>
 
                     <td className="py-5 px-6">
                       <div className="text-lg font-bold text-red-600">
-                        {log.value.toLocaleString("en-LK", {
+                        {new Intl.NumberFormat("en-LK", {
                           style: "currency",
                           currency: "LKR",
                           minimumFractionDigits: 0,
-                        })}
+                          maximumFractionDigits: 0,
+                        }).format(Number(log.value) || 0)}
                       </div>
                       <div className="text-xs text-slate-500 font-medium">Cost impact</div>
                     </td>
@@ -898,7 +926,7 @@ export default function WastePage() {
                             <MapPin className="w-4 h-4 text-slate-400" />
                           </div>
                           <div>
-                            <div className="text-sm font-semibold text-slate-900">{log.branch.name}</div>
+                            <div className="text-sm font-semibold text-slate-900">{log.branch?.name || 'Unknown'}</div>
                             <div className="text-xs text-slate-500">Branch location</div>
                           </div>
                         </div>
@@ -1100,7 +1128,7 @@ export default function WastePage() {
                       required
                     >
                       <option value="">Select Branch</option>
-                      {branches.map((branch) => (
+                      {Array.isArray(branches) && branches.map((branch) => (
                         <option key={branch.id} value={branch.id}>
                           {branch.name} - {branch.location}
                         </option>
@@ -1176,16 +1204,18 @@ export default function WastePage() {
                 <div className="space-y-2">
                   <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Quantity</label>
                   <p className="text-lg font-bold text-slate-900">
-                    {viewingLog.quantity} {viewingLog.unit}
+                    {Number(viewingLog.quantity).toFixed(1)} {viewingLog.unit}
                   </p>
                 </div>
                 <div className="space-y-2">
                   <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Financial Value</label>
                   <p className="text-lg font-bold text-red-600">
-                    {viewingLog.value.toLocaleString("en-LK", {
+                    {new Intl.NumberFormat("en-LK", {
                       style: "currency",
                       currency: "LKR",
-                    })}
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 0,
+                    }).format(Number(viewingLog.value) || 0)}
                   </p>
                 </div>
                 <div className="space-y-2">
@@ -1197,7 +1227,7 @@ export default function WastePage() {
                 </div>
               </div>
 
-              {user?.role === "SUPER_ADMIN" && (
+              {user?.role === "SUPER_ADMIN" && viewingLog.branch && (
                 <div className="space-y-2 pt-4 border-t border-slate-200">
                   <label className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Branch Location</label>
                   <div className="flex items-center gap-2">
@@ -1272,7 +1302,7 @@ export default function WastePage() {
                     Review and approve changes requested by branch administrators</p>
                 </div>
               </div>
-              {reviews.length > 0 && (
+              {Array.isArray(reviews) && reviews.length > 0 && (
                 <div className="absolute top-6 right-16">
                   <span className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white/20 rounded-full text-sm font-semibold">
                     <Activity className="w-4 h-4" />
@@ -1284,7 +1314,7 @@ export default function WastePage() {
 
             {/* Modal Content */}
             <div className="max-h-[calc(90vh-200px)] overflow-y-auto p-6">
-              {reviews.length > 0 ? (
+              {Array.isArray(reviews) && reviews.length > 0 ? (
                 <div className="space-y-6">
                   {reviews.map((review) => (
                     <div
@@ -1414,7 +1444,7 @@ export default function WastePage() {
               <div className="flex items-center gap-2 text-slate-600">
                 <Activity className="w-4 h-4" />
                 <span className="text-sm font-medium">
-                  {reviews.length} pending review{reviews.length !== 1 ? "s" : ""}
+                  {Array.isArray(reviews) ? reviews.length : 0} pending review{(Array.isArray(reviews) && reviews.length !== 1) ? "s" : ""}
                 </span>
               </div>
               <button
