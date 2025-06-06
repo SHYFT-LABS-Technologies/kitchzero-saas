@@ -1,6 +1,7 @@
 import * as wasteLogRepository from '@/lib/repositories/wasteLogRepository';
-import { prisma } from '@/lib/prisma'; // For creating review entries directly
-import type { WasteLog as PrismaWasteLog, Prisma, WasteLogReview as PrismaWasteLogReview } from '@prisma/client';
+// import { prisma } from '@/lib/prisma'; // No longer needed for direct review creation
+import * as reviewApiService from './reviewApiService'; // Import the new reviewApiService
+import type { WasteLog as PrismaWasteLog, Prisma } from '@prisma/client';
 import type { WasteLogData, AuthUser, DeletionReason } from '@/lib/types';
 import { ForbiddenError, NotFoundError, BadRequestError } from '@/lib/api-utils';
 
@@ -50,16 +51,14 @@ export async function recordNewWasteLog(
     }
     branchIdToAssign = user.branchId;
 
-    // Create a review request for BRANCH_ADMIN
-    const review = await prisma.wasteLogReview.create({
-      data: {
-        action: 'CREATE',
-        status: 'PENDING',
-        newData: data as any, // Store the proposed data
-        createdById: user.id,
-        branchId: branchIdToAssign,
-      },
-    });
+    // Use reviewApiService to create the review request
+    const review = await reviewApiService.createReviewRequest(
+      'CREATE',
+      'WASTE_LOG', // EntityType - assuming WasteLogReview model will have this
+      data,        // newData
+      user.id,     // creatorId
+      branchIdToAssign // branchId for the review context
+    );
     return { message: 'Waste log creation request submitted for approval.', reviewId: review.id };
 
   } else if (user.role === 'SUPER_ADMIN') {
@@ -97,17 +96,15 @@ export async function modifyWasteLog(
         throw new ForbiddenError('Branch admins cannot change the branch of a waste log.');
     }
 
-    const review = await prisma.wasteLogReview.create({
-      data: {
-        action: 'UPDATE',
-        status: 'PENDING',
-        wasteLogId: existingLog.id,
-        originalData: existingLog as any,
-        newData: data as any,
-        createdById: user.id,
-        branchId: existingLog.branchId,
-      },
-    });
+    // Use reviewApiService to create the review request
+    const review = await reviewApiService.createReviewRequest(
+      'UPDATE',
+      'WASTE_LOG',
+      data,        // newData for the update
+      user.id,
+      existingLog.branchId, // branchId of the existing log
+      existingLog.id // entityId
+    );
     return { message: 'Waste log update request submitted for approval.', reviewId: review.id };
   } else if (user.role === 'SUPER_ADMIN') {
     const preparedData: Prisma.WasteLogUpdateInput = {
@@ -141,17 +138,16 @@ export async function removeWasteLog(
     if (!user.branchId) throw new ForbiddenError('Branch admin is not associated with a branch.');
     if (!deletionReason) throw new BadRequestError('Deletion reason is required for branch admins.');
 
-    const review = await prisma.wasteLogReview.create({
-      data: {
-        action: 'DELETE',
-        status: 'PENDING',
-        wasteLogId: existingLog.id,
-        originalData: existingLog as any,
-        reason: deletionReason,
-        createdById: user.id,
-        branchId: existingLog.branchId,
-      },
-    });
+    // Use reviewApiService to create the review request
+    const review = await reviewApiService.createReviewRequest(
+      'DELETE',
+      'WASTE_LOG',
+      existingLog as any, // originalData for delete
+      user.id,
+      existingLog.branchId,
+      existingLog.id, // entityId
+      deletionReason
+    );
     return { message: 'Waste log deletion request submitted for approval.', reviewId: review.id };
   } else if (user.role === 'SUPER_ADMIN') {
     await wasteLogRepository.deleteById(id);

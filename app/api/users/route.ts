@@ -1,168 +1,64 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { getAuthUser, hashPassword } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
+import { type NextRequest, NextResponse } from "next/server";
+import { getAuthUser } from "@/lib/auth";
+import * as userApiService from "@/lib/api_services/userApiService";
+import { createUserSchema } from "@/lib/validation";
 import {
   handleApiError,
-  checkRateLimitEnhanced,
-  createSecureErrorResponse // Added for CSRF
-} from "@/lib/api-utils"
-import { verifyCsrfToken } from "@/lib/security"; // Import CSRF verification
+  validateAndParseBody,
+  createSecureSuccessResponse,
+  createSecureErrorResponse,
+  checkRateLimitEnhanced
+} from "@/lib/api-utils";
+import { verifyCsrfToken } from "@/lib/security";
+import type { UserCreationData } from "@/lib/types";
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getAuthUser(request)
-    if (!user || user.role !== "SUPER_ADMIN") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+    const authUser = await getAuthUser(request);
+    // Service layer will enforce SUPER_ADMIN, but an initial check is good practice
+    if (!authUser || authUser.role !== "SUPER_ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+    await checkRateLimitEnhanced(request, authUser, 'api_read');
 
-    await checkRateLimitEnhanced(request, user, 'api_read');
+    const users = await userApiService.fetchAllUsers(authUser);
+    // users from service are already without password
+    return createSecureSuccessResponse({ users });
 
-    const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        username: true,
-        role: true,
-        branchId: true,
-        branch: {
-          select: {
-            id: true,
-            name: true,
-            location: true,
-          },
-        },
-        createdAt: true,
-        updatedAt: true,
-      },
-      orderBy: { createdAt: "desc" },
-    })
-
-    return NextResponse.json({ users })
   } catch (error) {
-    return handleApiError(error)
+    return handleApiError(error);
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getAuthUser(request)
-    if (!user || user.role !== "SUPER_ADMIN") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+    const authUser = await getAuthUser(request);
+     // Service layer will enforce SUPER_ADMIN for user creation
+    if (!authUser || authUser.role !== "SUPER_ADMIN") {
+       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     if (!verifyCsrfToken(request)) {
-      // Log the CSRF failure for server-side observability
       console.warn(`CSRF validation failed for request: ${request.method} ${request.url}`);
       return createSecureErrorResponse('Invalid CSRF token', 403);
     }
+    await checkRateLimitEnhanced(request, authUser, 'api_write');
 
-    await checkRateLimitEnhanced(request, user, 'api_write');
+    const validatedData = await validateAndParseBody(request, createUserSchema);
 
-    // Get request body
-    const body = await request.json()
-    console.log("Create user request body:", body)
-
-    // Manual validation to avoid UUID issues
-    if (!body.username || body.username.trim().length < 3) {
-      return NextResponse.json(
-        { error: "Username must be at least 3 characters long" },
-        { status: 400 }
-      )
+    // Ensure password is provided, as createUserSchema makes it required
+    // but UserCreationData in lib/types might have it optional.
+    // The service layer addNewUser also checks this.
+    if (!validatedData.password) {
+        return NextResponse.json({ error: "Password is required" }, { status: 400 });
     }
 
-    // Password policy validation
-    const passwordErrors = [];
-    if (!body.password || body.password.length < 10) {
-      passwordErrors.push("Password must be at least 10 characters long.");
-    }
-    if (!/[A-Z]/.test(body.password)) {
-      passwordErrors.push("Password must contain at least one uppercase letter.");
-    }
-    if (!/[a-z]/.test(body.password)) {
-      passwordErrors.push("Password must contain at least one lowercase letter.");
-    }
-    if (!/[0-9]/.test(body.password)) {
-      passwordErrors.push("Password must contain at least one number.");
-    }
-    if (!/[!@#$%^&*]/.test(body.password)) {
-      passwordErrors.push("Password must contain at least one special character (e.g., !@#$%^&*).");
-    }
+    const newUser = await userApiService.addNewUser(validatedData as UserCreationData, authUser);
+    // newUser from service is already without password
 
-    if (passwordErrors.length > 0) {
-      return NextResponse.json(
-        { error: "Password validation failed", details: passwordErrors },
-        { status: 400 }
-      );
-    }
+    return createSecureSuccessResponse({ user: newUser, message: "User created successfully" }, 201);
 
-    if (!body.role || !['SUPER_ADMIN', 'BRANCH_ADMIN'].includes(body.role)) {
-      return NextResponse.json(
-        { error: "Invalid role. Must be SUPER_ADMIN or BRANCH_ADMIN" },
-        { status: 400 }
-      )
-    }
-
-    // For BRANCH_ADMIN, validate branch selection
-    if (body.role === 'BRANCH_ADMIN') {
-      if (!body.branchId || body.branchId.trim() === '') {
-        return NextResponse.json(
-          { error: "Branch selection is required for Branch Admin role" },
-          { status: 400 }
-        )
-      }
-
-      // Check if branch exists
-      const branchExists = await prisma.branch.findUnique({
-        where: { id: body.branchId }
-      })
-
-      if (!branchExists) {
-        return NextResponse.json(
-          { error: "Selected branch does not exist" },
-          { status: 400 }
-        )
-      }
-    }
-
-    // Check if username already exists
-    const existingUser = await prisma.user.findUnique({
-      where: { username: body.username.trim() },
-    })
-
-    if (existingUser) {
-      return NextResponse.json({ error: "Username already exists" }, { status: 409 })
-    }
-
-    const hashedPassword = await hashPassword(body.password)
-
-    const newUser = await prisma.user.create({
-      data: {
-        username: body.username.trim(),
-        password: hashedPassword,
-        role: body.role,
-        branchId: body.role === "BRANCH_ADMIN" ? body.branchId : null,
-      },
-      select: {
-        id: true,
-        username: true,
-        role: true,
-        branchId: true,
-        branch: {
-          select: {
-            id: true,
-            name: true,
-            location: true,
-          },
-        },
-        createdAt: true,
-      },
-    })
-
-    return NextResponse.json({ 
-      user: newUser,
-      message: "User created successfully" 
-    })
   } catch (error) {
-    console.error("Error creating user:", error)
     return handleApiError(error)
   }
 }

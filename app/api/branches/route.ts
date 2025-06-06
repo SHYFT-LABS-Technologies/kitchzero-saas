@@ -1,110 +1,58 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { getAuthUser } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
-import { branchSchema } from "@/lib/validation"
+import { type NextRequest, NextResponse } from "next/server";
+import { getAuthUser } from "@/lib/auth";
+import * as branchApiService from "@/lib/api_services/branchApiService";
+import { branchSchema } from "@/lib/validation";
 import {
   handleApiError,
   validateAndParseBody,
-  checkRateLimitEnhanced,
-  createSecureErrorResponse // Added for CSRF
-} from "@/lib/api-utils"
-import { verifyCsrfToken } from "@/lib/security"; // Import CSRF verification
+  createSecureSuccessResponse,
+  createSecureErrorResponse,
+  checkRateLimitEnhanced
+} from "@/lib/api-utils";
+import { verifyCsrfToken } from "@/lib/security";
+import type { BranchData } from "@/lib/types";
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getAuthUser(request)
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const authUser = await getAuthUser(request);
+    // Access control is handled by the service layer, but an initial check can be here
+    if (!authUser || authUser.role !== "SUPER_ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
+    await checkRateLimitEnhanced(request, authUser, 'api_read');
 
-    // Apply PostgreSQL-backed rate limiting using the 'api_read' configuration.
-    // Limits are defined in rateLimitConfigs in lib/rate-limit-postgres.ts and selected based on endpointName and user role.
-    await checkRateLimitEnhanced(request, user, 'api_read');
+    const branches = await branchApiService.fetchAllBranches();
+    return createSecureSuccessResponse({ branches });
 
-    let branches
-    if (user.role === "SUPER_ADMIN") {
-      branches = await prisma.branch.findMany({
-        include: {
-          users: {
-            select: { id: true, username: true, role: true },
-          },
-          _count: {
-            select: { inventory: true, wasteLogs: true },
-          },
-        },
-        orderBy: { createdAt: "desc" },
-      })
-    } else {
-      branches = await prisma.branch.findMany({
-        where: { id: user.branchId },
-        include: {
-          users: {
-            select: { id: true, username: true, role: true },
-          },
-          _count: {
-            select: { inventory: true, wasteLogs: true },
-          },
-        },
-      })
-    }
-
-    return NextResponse.json({ branches })
   } catch (error) {
-    return handleApiError(error)
+    return handleApiError(error);
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getAuthUser(request)
-    if (!user || user.role !== "SUPER_ADMIN") {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 })
+    const authUser = await getAuthUser(request);
+    // Service layer will enforce SUPER_ADMIN, but this is a quick check
+    if (!authUser || authUser.role !== "SUPER_ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // Perform CSRF validation: token in X-CSRF-Token header must match token in HttpOnly cookie.
     if (!verifyCsrfToken(request)) {
       console.warn(`CSRF validation failed for request: ${request.method} ${request.url}`);
       return createSecureErrorResponse('Invalid CSRF token', 403);
     }
+    await checkRateLimitEnhanced(request, authUser, 'api_write');
 
-    // Rate limiting
-    await checkRateLimitEnhanced(request, user, 'api_write');
+    const validatedData = await validateAndParseBody(request, branchSchema);
 
-    // Validate request body
-    const validatedData = await validateAndParseBody(request, branchSchema)
+    const newBranch = await branchApiService.addNewBranch(validatedData as BranchData, authUser);
 
-    // Check for duplicate branch name
-    const existingBranch = await prisma.branch.findFirst({
-      where: { name: validatedData.name }
-    })
+    // The service returns the branch with included relations as defined in the repository
+    return createSecureSuccessResponse({ branch: newBranch, message: "Branch created successfully" }, 201);
 
-    if (existingBranch) {
-      return NextResponse.json(
-        { error: "A branch with this name already exists" },
-        { status: 409 }
-      )
-    }
-
-    const branch = await prisma.branch.create({
-      data: {
-        name: validatedData.name,
-        location: validatedData.location,
-      },
-      include: {
-        users: {
-          select: { id: true, username: true, role: true },
-        },
-        _count: {
-          select: { inventory: true, wasteLogs: true },
-        },
-      },
-    })
-
-    return NextResponse.json({ 
-      branch,
-      message: "Branch created successfully"
-    })
   } catch (error) {
-    return handleApiError(error)
+    // Specific error for duplicate branch name can be caught if service throws a specific error type
+    // For now, handleApiError will catch Prisma unique constraint errors if not caught by service
+    return handleApiError(error);
   }
 }

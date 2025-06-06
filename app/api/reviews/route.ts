@@ -1,54 +1,36 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { getAuthUser } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
-import { checkRateLimitEnhanced, handleApiError } from "@/lib/api-utils" // Added imports
+import { type NextRequest, NextResponse } from "next/server";
+import { getAuthUser } from "@/lib/auth";
+import * as reviewApiService from "@/lib/api_services/reviewApiService";
+import {
+  checkRateLimitEnhanced,
+  handleApiError,
+  createSecureSuccessResponse
+} from "@/lib/api-utils";
+import type { ReviewStatus } from "@/lib/repositories/reviewRepository"; // Import ReviewStatus type
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getAuthUser(request)
-    if (!user || user.role !== "SUPER_ADMIN") { // Assuming only SUPER_ADMIN can access all reviews
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    const authUser = await getAuthUser(request);
+    // Service will enforce SUPER_ADMIN, but an initial check is good practice
+    if (!authUser || authUser.role !== "SUPER_ADMIN") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    await checkRateLimitEnhanced(request, user, 'api_read');
+    await checkRateLimitEnhanced(request, authUser, 'api_read');
 
-    const { searchParams } = new URL(request.url)
-    const status = searchParams.get("status")
+    const { searchParams } = new URL(request.url);
+    const status = searchParams.get("status") as ReviewStatus | null; // Cast to ReviewStatus or null
 
-    const whereClause = status && status !== "" ? { status: status as any } : {}
+    // Validate status if provided
+    if (status && !['PENDING', 'APPROVED', 'REJECTED'].includes(status)) {
+        return NextResponse.json({ error: "Invalid status filter" }, { status: 400 });
+    }
 
-    const reviews = await prisma.wasteLogReview.findMany({
-      where: whereClause,
-      include: {
-        creator: {
-          select: {
-            id: true,
-            username: true,
-            role: true,
-            branch: {
-              select: { name: true },
-            },
-          },
-        },
-        approver: {
-          select: {
-            username: true,
-          },
-        },
-        wasteLog: {
-          include: {
-            branch: {
-              select: { id: true, name: true, location: true },
-            },
-          },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    })
+    const reviews = await reviewApiService.fetchAllReviews(authUser, status || undefined);
 
-    return NextResponse.json({ reviews })
+    return createSecureSuccessResponse({ reviews });
+
   } catch (error) {
-    // Use handleApiError for consistent error handling
     return handleApiError(error)
   }
 }
