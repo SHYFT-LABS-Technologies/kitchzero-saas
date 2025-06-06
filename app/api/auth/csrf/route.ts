@@ -1,9 +1,10 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import {
   generateCsrfToken,
-  CSRF_FALLBACK_COOKIE_NAME, // Using fallback for wider initial compatibility (e.g. non-HTTPS dev environments)
+  CSRF_FALLBACK_COOKIE_NAME,
+  CSRF_HOST_COOKIE_NAME,
   CSRF_COOKIE_BASE_OPTIONS
-} from '@/lib/security'; // Assuming @ refers to root, adjust if necessary based on actual tsconfig paths
+} from '@/lib/security';
 
 /**
  * GET /api/auth/csrf
@@ -43,17 +44,28 @@ export async function GET(request: NextRequest) {
     const response = NextResponse.json({ csrfToken });
 
     // Set the CSRF token in an HttpOnly cookie.
-    // The client-side JavaScript will read the token from the JSON response
-    // and send it back in a custom header for mutating requests.
-    response.cookies.set(
-      CSRF_FALLBACK_COOKIE_NAME, // Using fallback for now; __Host- prefix has stricter requirements
-      csrfToken,
-      {
-        ...CSRF_COOKIE_BASE_OPTIONS,
-        secure: isProduction, // Cookie should only be sent over HTTPS in production
-        // Consider adding maxAge if desired, e.g., maxAge: 60 * 60 (1 hour)
-        // If not set, it's a session cookie by default (deleted when browser closes).
+    const cookieName = isProduction ? CSRF_HOST_COOKIE_NAME : CSRF_FALLBACK_COOKIE_NAME;
+
+    // Base options are already path: '/' and httpOnly: true
+    const cookieOptions: Parameters<typeof response.cookies.set>[2] = {
+      ...CSRF_COOKIE_BASE_OPTIONS,
+      secure: isProduction, // Always true for __Host- prefix, also good practice for fallback in prod-like environments
+      // domain: isProduction ? undefined : CSRF_COOKIE_BASE_OPTIONS.domain, // Domain should not be set for __Host-
+    };
+
+    // The __Host- prefix requires the 'secure' attribute to be true and no 'domain' attribute.
+    // CSRF_COOKIE_BASE_OPTIONS already sets path: '/'.
+    if (isProduction) {
+      // Ensure no domain attribute for __Host- cookies
+      if ('domain' in cookieOptions) {
+        delete cookieOptions.domain;
       }
+    }
+
+    response.cookies.set(
+      cookieName,
+      csrfToken,
+      cookieOptions
     );
 
     return response;

@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
       secure: isProduction,
       sameSite: "lax",
       maxAge: 7 * 24 * 60 * 60, // 7 days
-      path: "/",
+      path: "/api/auth/refresh",
     })
 
     return response

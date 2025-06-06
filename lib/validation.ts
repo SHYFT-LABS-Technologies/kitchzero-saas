@@ -74,15 +74,20 @@ export const loginSchema = z.object({
 export const createUserSchema = z.object({
   username: usernameSchema,
   password: z.string()
-    .min(8, "Password must be at least 8 characters")
+    .min(10, "Password must be at least 10 characters long.")
     .max(100, "Password is too long")
-    .refine((val) => {
-      const hasLowerCase = /[a-z]/.test(val)
-      const hasUpperCase = /[A-Z]/.test(val)
-      const hasNumber = /[0-9]/.test(val)
-      const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>?]/.test(val)
-      return hasLowerCase && hasUpperCase && hasNumber && hasSpecialChar
-    }, "Password must contain uppercase, lowercase, number, and special character"),
+    .refine((val) => /[A-Z]/.test(val), {
+      message: "Password must contain at least one uppercase letter.",
+    })
+    .refine((val) => /[a-z]/.test(val), {
+      message: "Password must contain at least one lowercase letter.",
+    })
+    .refine((val) => /[0-9]/.test(val), {
+      message: "Password must contain at least one number.",
+    })
+    .refine((val) => /[!@#$%^&*]/.test(val), {
+      message: "Password must contain at least one special character (e.g., !@#$%^&*).",
+    }),
   role: userRoleSchema,
   branchId: uuidSchema.optional().nullable()
 }).refine((data) => {
@@ -101,15 +106,20 @@ export const createUserSchema = z.object({
 export const updateUserSchema = z.object({
   username: usernameSchema.optional(),
   password: z.string()
-    .min(8, "Password must be at least 8 characters")
+    .min(10, "Password must be at least 10 characters long.")
     .max(100, "Password is too long")
-    .refine((val) => {
-      const hasLowerCase = /[a-z]/.test(val)
-      const hasUpperCase = /[A-Z]/.test(val)
-      const hasNumber = /[0-9]/.test(val)
-      const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>?]/.test(val)
-      return hasLowerCase && hasUpperCase && hasNumber && hasSpecialChar
-    }, "Password must contain uppercase, lowercase, number, and special character")
+    .refine((val) => /[A-Z]/.test(val), {
+      message: "Password must contain at least one uppercase letter.",
+    })
+    .refine((val) => /[a-z]/.test(val), {
+      message: "Password must contain at least one lowercase letter.",
+    })
+    .refine((val) => /[0-9]/.test(val), {
+      message: "Password must contain at least one number.",
+    })
+    .refine((val) => /[!@#$%^&*]/.test(val), {
+      message: "Password must contain at least one special character (e.g., !@#$%^&*).",
+    })
     .optional()
     .or(z.literal("")),
   role: userRoleSchema.optional(),

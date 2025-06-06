@@ -92,31 +92,24 @@ export const CSRF_COOKIE_BASE_OPTIONS = {
  */
 export function verifyCsrfToken(request: NextRequest): boolean {
   const tokenFromHeader = request.headers.get(CSRF_HEADER_NAME);
-
-  // This function relies on CSRF_FALLBACK_COOKIE_NAME being used consistently
-  // by the endpoint that sets the CSRF cookie (e.g., /api/auth/csrf).
-  // If the cookie-setting endpoint were to use CSRF_HOST_COOKIE_NAME under certain conditions (like HTTPS),
-  // this verification logic would need to be aware of that or check for both potential cookie names.
-  // For simplicity in this implementation, CSRF_FALLBACK_COOKIE_NAME is used as the single source of truth for the cookie name.
-  const tokenFromCookie = request.cookies.get(CSRF_FALLBACK_COOKIE_NAME)?.value;
+  const isProduction = process.env.NODE_ENV === 'production';
+  const cookieName = isProduction ? CSRF_HOST_COOKIE_NAME : CSRF_FALLBACK_COOKIE_NAME;
+  const tokenFromCookie = request.cookies.get(cookieName)?.value;
 
   if (!tokenFromHeader || !tokenFromCookie) {
     if (!tokenFromHeader) {
-      console.warn(`CSRF verification failed: Missing ${CSRF_HEADER_NAME} header. This header should be sent by the client with the token value.`);
+      console.warn(`CSRF verification failed: Missing ${CSRF_HEADER_NAME} header.`);
     }
     if (!tokenFromCookie) {
-      console.warn(`CSRF verification failed: Missing ${CSRF_FALLBACK_COOKIE_NAME} cookie. This HttpOnly cookie should be automatically sent by the browser.`);
+      console.warn(`CSRF verification failed: Missing ${cookieName} cookie (Environment: ${isProduction ? 'production' : 'development'}).`);
     }
     return false;
   }
 
   if (tokenFromHeader !== tokenFromCookie) {
-    // Avoid logging the tokens themselves in production environments for security reasons,
-    // or consider logging only truncated or hashed versions if necessary for debugging.
-    // The current logging is primarily for development insight.
-    console.warn('CSRF verification failed: Token mismatch. The token from the header did not match the token from the cookie.');
+    console.warn(`CSRF verification failed: Token mismatch (Cookie: ${cookieName}). Header and cookie tokens do not match.`);
     // For more detailed debugging (use with caution, especially in prod):
-    // console.warn('CSRF verification failed: Token mismatch.', { headerToken: tokenFromHeader, cookieToken: tokenFromCookie });
+    // console.warn('CSRF verification failed: Token mismatch.', { headerToken: tokenFromHeader, cookieToken: tokenFromCookie, cookieName: cookieName });
     return false;
   }
 

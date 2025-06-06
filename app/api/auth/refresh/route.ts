@@ -158,7 +158,7 @@ export async function POST(request: NextRequest) {
       secure: isProduction,
       sameSite: "lax",
       maxAge: jwtConfig.refreshTokenExpiryInSeconds || (7 * 24 * 60 * 60),
-      path: "/api/auth",
+      path: "/api/auth/refresh",
     })
     
     return response

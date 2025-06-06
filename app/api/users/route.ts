@@ -69,11 +69,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!body.password || body.password.length < 6) {
+    // Password policy validation
+    const passwordErrors = [];
+    if (!body.password || body.password.length < 10) {
+      passwordErrors.push("Password must be at least 10 characters long.");
+    }
+    if (!/[A-Z]/.test(body.password)) {
+      passwordErrors.push("Password must contain at least one uppercase letter.");
+    }
+    if (!/[a-z]/.test(body.password)) {
+      passwordErrors.push("Password must contain at least one lowercase letter.");
+    }
+    if (!/[0-9]/.test(body.password)) {
+      passwordErrors.push("Password must contain at least one number.");
+    }
+    if (!/[!@#$%^&*]/.test(body.password)) {
+      passwordErrors.push("Password must contain at least one special character (e.g., !@#$%^&*).");
+    }
+
+    if (passwordErrors.length > 0) {
       return NextResponse.json(
-        { error: "Password must be at least 6 characters long" },
+        { error: "Password validation failed", details: passwordErrors },
         { status: 400 }
-      )
+      );
     }
 
     if (!body.role || !['SUPER_ADMIN', 'BRANCH_ADMIN'].includes(body.role)) {
