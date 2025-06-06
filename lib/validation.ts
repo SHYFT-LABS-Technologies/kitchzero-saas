@@ -1,21 +1,15 @@
 import { z } from 'zod'
+import {
+  sanitizedStringSchema,
+  sanitizedUrlSchema,
+  itemNameSchema,
+  usernameSchema,
+  locationSchema,
+  financialValueSchema,
+  quantitySchema
+} from './sanitization'
 
-// Common validation patterns
-const uuidSchema = z.string().uuid("Invalid ID format")
-const positiveNumberSchema = z.number().positive("Must be a positive number")
-const nonEmptyStringSchema = z.string().min(1, "This field is required")
-
-// Date validation (YYYY-MM-DD format)
-const dateStringSchema = z.string().regex(
-  /^\d{4}-\d{2}-\d{2}$/,
-  "Date must be in YYYY-MM-DD format"
-).refine((date) => {
-  const parsed = new Date(date)
-  const now = new Date()
-  return parsed <= now
-}, "Date cannot be in the future")
-
-// Enum schemas
+// Enhanced enum schemas
 const unitSchema = z.enum(['kg', 'g', 'pieces', 'liters', 'portions'], {
   errorMap: () => ({ message: "Unit must be one of: kg, g, pieces, liters, portions" })
 })
@@ -28,184 +22,242 @@ const userRoleSchema = z.enum(['SUPER_ADMIN', 'BRANCH_ADMIN'], {
   errorMap: () => ({ message: "Role must be SUPER_ADMIN or BRANCH_ADMIN" })
 })
 
-// Analytics validation schemas
+// Enhanced date validation
+const dateStringSchema = z.string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format")
+  .refine((date) => {
+    const parsed = new Date(date + 'T00:00:00.000Z')
+    return !isNaN(parsed.getTime())
+  }, "Invalid date")
+  .refine((date) => {
+    const parsed = new Date(date + 'T00:00:00.000Z')
+    const now = new Date()
+    const maxPastDate = new Date(now.getFullYear() - 10, now.getMonth(), now.getDate())
+    const maxFutureDate = new Date(now.getFullYear() + 5, now.getMonth(), now.getDate())
+    return parsed >= maxPastDate && parsed <= maxFutureDate
+  }, "Date must be within reasonable range")
+
+// UUID validation
+const uuidSchema = z.string()
+  .transform((val) => val.trim())
+  .refine((val) => {
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    return uuidRegex.test(val)
+  }, "Invalid UUID format")
+
+// Analytics validation
 export const analyticsQuerySchema = z.object({
   timeRange: z.enum(['today', '7d', '30d', '90d'], {
     errorMap: () => ({ message: "Time range must be one of: today, 7d, 30d, 90d" })
   }).optional().default('today')
 })
 
-// Auth validation schemas
+// Enhanced auth validation
 export const loginSchema = z.object({
-  username: z.string()
-    .min(3, "Username must be at least 3 characters")
-    .max(50, "Username must be less than 50 characters")
-    .regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores"),
+  username: usernameSchema,
   password: z.string()
     .min(6, "Password must be at least 6 characters")
     .max(100, "Password is too long")
+    .refine((val) => {
+      const hasLetter = /[a-zA-Z]/.test(val)
+      const hasNumber = /[0-9]/.test(val)
+      return hasLetter && hasNumber
+    }, "Password must contain at least one letter and one number")
+}).refine((data) => {
+  return data.password.toLowerCase() !== data.username.toLowerCase()
+}, {
+  message: "Password cannot be the same as username",
+  path: ["password"]
 })
 
-// User validation schemas
+// Enhanced user validation
 export const createUserSchema = z.object({
-  username: z.string()
-    .min(3, "Username must be at least 3 characters")
-    .max(50, "Username must be less than 50 characters")
-    .regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores"),
+  username: usernameSchema,
   password: z.string()
-    .min(6, "Password must be at least 6 characters")
-    .max(100, "Password is too long"),
+    .min(8, "Password must be at least 8 characters")
+    .max(100, "Password is too long")
+    .refine((val) => {
+      const hasLowerCase = /[a-z]/.test(val)
+      const hasUpperCase = /[A-Z]/.test(val)
+      const hasNumber = /[0-9]/.test(val)
+      const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>?]/.test(val)
+      return hasLowerCase && hasUpperCase && hasNumber && hasSpecialChar
+    }, "Password must contain uppercase, lowercase, number, and special character"),
   role: userRoleSchema,
-  branchId: z.string()
-    .min(1, "Branch ID is required")
-    .optional()
-    .nullable()
+  branchId: uuidSchema.optional().nullable()
 }).refine((data) => {
-  // Only require branchId if role is BRANCH_ADMIN
   if (data.role === 'BRANCH_ADMIN' && (!data.branchId || data.branchId.trim() === '')) {
+    return false
+  }
+  if (data.role === 'SUPER_ADMIN' && data.branchId) {
     return false
   }
   return true
 }, {
-  message: "Branch selection is required for Branch Admin role",
+  message: "Branch selection is required for Branch Admin role and should be empty for Super Admin",
   path: ["branchId"]
 })
 
 export const updateUserSchema = z.object({
-  username: z.string()
-    .min(3, "Username must be at least 3 characters")
-    .max(50, "Username must be less than 50 characters")
-    .regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores")
-    .optional(),
+  username: usernameSchema.optional(),
   password: z.string()
-    .min(6, "Password must be at least 6 characters")
+    .min(8, "Password must be at least 8 characters")
     .max(100, "Password is too long")
+    .refine((val) => {
+      const hasLowerCase = /[a-z]/.test(val)
+      const hasUpperCase = /[A-Z]/.test(val)
+      const hasNumber = /[0-9]/.test(val)
+      const hasSpecialChar = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>?]/.test(val)
+      return hasLowerCase && hasUpperCase && hasNumber && hasSpecialChar
+    }, "Password must contain uppercase, lowercase, number, and special character")
     .optional()
-    .or(z.literal("")), // Allow empty string for "no password change"
+    .or(z.literal("")),
   role: userRoleSchema.optional(),
-  branchId: z.string()
-    .min(1, "Branch ID is required")
-    .optional()
-    .nullable()
+  branchId: uuidSchema.optional().nullable()
 }).refine((data) => {
-  // Only require branchId if role is BRANCH_ADMIN
-  if (data.role === 'BRANCH_ADMIN' && (!data.branchId || data.branchId.trim() === '')) {
+  return data.username || data.password || data.role || data.branchId !== undefined
+}, {
+  message: "At least one field must be provided for update",
+  path: ["root"]
+})
+
+// Enhanced branch validation
+export const branchSchema = z.object({
+  name: sanitizedStringSchema({
+    minLength: 2,
+    maxLength: 100,
+    pattern: /^[a-zA-Z0-9\s\-_.,()&]+$/,
+    errorMessage: 'Branch name contains invalid characters'
+  }),
+  location: locationSchema
+}).refine((data) => {
+  return data.name.toLowerCase() !== data.location.toLowerCase()
+}, {
+  message: "Branch name and location cannot be identical",
+  path: ["name"]
+})
+
+// Enhanced inventory validation
+export const inventorySchema = z.object({
+  itemName: itemNameSchema,
+  quantity: quantitySchema,
+  unit: unitSchema,
+  expiryDate: z.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Expiry date must be in YYYY-MM-DD format")
+    .refine((date) => {
+      const parsed = new Date(date + 'T00:00:00.000Z')
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      return parsed >= today
+    }, "Expiry date cannot be in the past")
+    .refine((date) => {
+      const parsed = new Date(date + 'T00:00:00.000Z')
+      const maxFutureDate = new Date()
+      maxFutureDate.setFullYear(maxFutureDate.getFullYear() + 10)
+      return parsed <= maxFutureDate
+    }, "Expiry date is too far in the future"),
+  purchaseCost: financialValueSchema,
+  branchId: uuidSchema.optional()
+}).refine((data) => {
+  const costPerUnit = data.purchaseCost / data.quantity
+  return costPerUnit <= 100000
+}, {
+  message: "Cost per unit is unreasonably high",
+  path: ["purchaseCost"]
+})
+
+// Fix the partial schema issue
+export const updateInventorySchema = z.object({
+  itemName: itemNameSchema.optional(),
+  quantity: quantitySchema.optional(),
+  unit: unitSchema.optional(),
+  expiryDate: z.string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Expiry date must be in YYYY-MM-DD format")
+    .refine((date) => {
+      const parsed = new Date(date + 'T00:00:00.000Z')
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      return parsed >= today
+    }, "Expiry date cannot be in the past")
+    .optional(),
+  purchaseCost: financialValueSchema.optional(),
+  branchId: uuidSchema.optional()
+}).refine((data) => {
+  return Object.keys(data).some(key => data[key as keyof typeof data] !== undefined)
+}, "At least one field must be provided for update")
+
+// Enhanced waste log validation
+export const wasteLogSchema = z.object({
+  itemName: itemNameSchema,
+  quantity: quantitySchema,
+  unit: unitSchema,
+  value: financialValueSchema,
+  reason: wasteReasonSchema,
+  photo: sanitizedUrlSchema.optional().or(z.literal("")),
+  branchId: uuidSchema.optional(),
+  wasteDate: dateStringSchema.optional()
+}).refine((data) => {
+  const valuePerUnit = data.value / data.quantity
+  return valuePerUnit <= 50000
+}, {
+  message: "Value per unit is unreasonably high for waste",
+  path: ["value"]
+}).refine((data) => {
+  if (data.reason === 'PLATE_WASTE' && data.quantity > 100) {
     return false
   }
-  // At least one field must be provided for update
-  if (!data.username && !data.password && !data.role && data.branchId === undefined) {
+  if (data.reason === 'SPOILAGE' && data.quantity > 1000) {
     return false
   }
   return true
 }, {
-  message: "At least one field must be provided for update, and Branch selection is required for Branch Admin role",
-  path: ["root"]
+  message: "Quantity is too high for the selected waste reason",
+  path: ["quantity"]
 })
 
-// Branch validation schemas
-export const branchSchema = z.object({
-  name: z.string()
-    .min(1, "Branch name is required")
-    .max(100, "Branch name must be less than 100 characters")
-    .trim(),
-  location: z.string()
-    .min(1, "Location is required")
-    .max(200, "Location must be less than 200 characters")
-    .trim()
-})
-
-export const updateBranchSchema = z.object({
-  name: z.string()
-    .min(1, "Branch name is required")
-    .max(100, "Branch name must be less than 100 characters")
-    .trim()
-    .optional(),
-  location: z.string()
-    .min(1, "Location is required")
-    .max(200, "Location must be less than 200 characters")
-    .trim()
-    .optional()
-}).refine((data) => {
-  // Ensure at least one field is provided for update
-  return data.name !== undefined || data.location !== undefined
-}, {
-  message: "At least one field (name or location) must be provided for update",
-  path: ["root"]
-})
-
-// Inventory validation schemas
-export const inventorySchema = z.object({
-  itemName: z.string()
-    .min(1, "Item name is required")
-    .max(100, "Item name must be less than 100 characters")
-    .trim(),
-  quantity: positiveNumberSchema.refine(val => val <= 999999, "Quantity is too large"),
-  unit: unitSchema,
-  expiryDate: z.string().regex(
-    /^\d{4}-\d{2}-\d{2}$/,
-    "Expiry date must be in YYYY-MM-DD format"
-  ).refine((date) => {
-    const parsed = new Date(date)
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    return parsed >= today
-  }, "Expiry date cannot be in the past"),
-  purchaseCost: positiveNumberSchema.refine(val => val <= 9999999, "Purchase cost is too large"),
-  branchId: uuidSchema.optional()
-})
-
-export const updateInventorySchema = inventorySchema.partial().extend({
-  itemName: z.string()
-    .min(1, "Item name is required")
-    .max(100, "Item name must be less than 100 characters")
-    .trim()
-    .optional(),
-}).refine((data) => {
-  return Object.keys(data).length > 0
-}, "At least one field must be provided for update")
-
-// Waste log validation schemas
-export const wasteLogSchema = z.object({
-  itemName: z.string()
-    .min(1, "Item name is required")
-    .max(100, "Item name must be less than 100 characters")
-    .trim(),
-  quantity: positiveNumberSchema.refine(val => val <= 999999, "Quantity is too large"),
-  unit: unitSchema,
-  value: positiveNumberSchema.refine(val => val <= 9999999, "Value is too large"),
-  reason: wasteReasonSchema,
-  photo: z.string()
-    .url("Photo must be a valid URL")
-    .optional()
-    .or(z.literal("")),
+// Fix the partial schema issue
+export const updateWasteLogSchema = z.object({
+  itemName: itemNameSchema.optional(),
+  quantity: quantitySchema.optional(),
+  unit: unitSchema.optional(),
+  value: financialValueSchema.optional(),
+  reason: wasteReasonSchema.optional(),
+  photo: sanitizedUrlSchema.optional().or(z.literal("")),
   branchId: uuidSchema.optional(),
   wasteDate: dateStringSchema.optional()
-})
-
-export const updateWasteLogSchema = wasteLogSchema.partial().refine((data) => {
-  return Object.keys(data).length > 0
+}).refine((data) => {
+  return Object.keys(data).some(key => data[key as keyof typeof data] !== undefined)
 }, "At least one field must be provided for update")
 
-// Review validation schemas
+// Review validation
 export const reviewActionSchema = z.object({
   action: z.enum(['approve', 'reject'], {
     errorMap: () => ({ message: "Action must be 'approve' or 'reject'" })
   }),
-  reviewNotes: z.string()
-    .min(1, "Review notes are required")
-    .max(500, "Review notes must be less than 500 characters")
-    .trim()
+  reviewNotes: sanitizedStringSchema({
+    minLength: 10,
+    maxLength: 1000,
+    errorMessage: "Review notes must be between 10 and 1000 characters"
+  })
 })
 
-// Delete validation (for requests that require a reason)
+// Delete validation
 export const deleteWithReasonSchema = z.object({
-  reason: z.string()
-    .min(1, "Reason is required for deletion")
-    .max(500, "Reason must be less than 500 characters")
-    .trim()
+  reason: sanitizedStringSchema({
+    minLength: 10,
+    maxLength: 500,
+    errorMessage: "Deletion reason must be between 10 and 500 characters"
+  })
+}).refine((data) => {
+  const genericReasons = ['delete', 'remove', 'mistake', 'error', 'wrong']
+  const reasonLower = data.reason.toLowerCase()
+  return !genericReasons.some(generic => reasonLower === generic)
+}, {
+  message: "Please provide a specific reason for deletion",
+  path: ["reason"]
 })
 
-// Custom error class for validation errors
+// Custom error class
 export class ValidationError extends Error {
   constructor(message: string, public errors: z.ZodIssue[]) {
     super(message)
@@ -213,7 +265,7 @@ export class ValidationError extends Error {
   }
 }
 
-// Helper function to validate request body
+// Helper functions
 export function validateRequestBody<T>(schema: z.ZodSchema<T>, data: unknown): T {
   try {
     return schema.parse(data)
@@ -225,7 +277,6 @@ export function validateRequestBody<T>(schema: z.ZodSchema<T>, data: unknown): T
   }
 }
 
-// Helper function to validate query parameters
 export function validateQueryParams<T>(schema: z.ZodSchema<T>, params: URLSearchParams): T {
   const data = Object.fromEntries(params.entries())
   try {

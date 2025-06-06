@@ -3,42 +3,35 @@ import bcrypt from "bcryptjs"
 
 const prisma = new PrismaClient()
 
-/**
- * Seed script to load test data
- * This can be run multiple times to refresh test data
- */
-
 async function main() {
   try {
     console.log("🌱 Loading test data...")
 
-    // Check if we should preserve existing data
-    const preserveData = process.argv.includes("--preserve")
-
-    if (!preserveData) {
-      console.log("🧹 Clearing existing test data...")
-      // Clear in correct order (respecting foreign key constraints)
-      await prisma.wasteLogReview.deleteMany({})
-      await prisma.wasteLog.deleteMany({})
-      await prisma.inventory.deleteMany({})
-      await prisma.user.deleteMany({})
-      await prisma.branch.deleteMany({})
-      console.log("✅ Existing data cleared")
-    }
+    // Clear existing data
+    console.log("🧹 Clearing existing test data...")
+    await prisma.wasteLogReview.deleteMany({})
+    await prisma.wasteLog.deleteMany({})
+    await prisma.inventory.deleteMany({})
+    await prisma.userSession.deleteMany({})
+    await prisma.loginAttempt.deleteMany({})
+    await prisma.rateLimit.deleteMany({})
+    await prisma.auditLog.deleteMany({})
+    await prisma.user.deleteMany({})
+    await prisma.branch.deleteMany({})
+    console.log("✅ Existing data cleared")
 
     // Create branches
     console.log("🏢 Creating branches...")
     const branches = await Promise.all([
       prisma.branch.create({
         data: {
-          id: "main-branch",
           name: "Main Restaurant",
           location: "Colombo, Sri Lanka",
         },
       }),
       prisma.branch.create({
         data: {
-          name: "Downtown Branch",
+          name: "Downtown Branch", 
           location: "Kandy, Sri Lanka",
         },
       }),
@@ -51,15 +44,15 @@ async function main() {
     ])
     console.log(`✅ Created ${branches.length} branches`)
 
-    // Create users
+    // Create users with secure passwords
     console.log("👥 Creating users...")
-    const hashedPassword = await bcrypt.hash("admin123", 12)
-    const branchPassword = await bcrypt.hash("branch123", 12)
+    const superAdminPassword = await bcrypt.hash("admin123", 12)
+    const branchAdminPassword = await bcrypt.hash("branch123", 12)
 
     const superAdmin = await prisma.user.create({
       data: {
         username: "superadmin",
-        password: hashedPassword,
+        password: superAdminPassword,
         role: "SUPER_ADMIN",
       },
     })
@@ -68,7 +61,7 @@ async function main() {
       prisma.user.create({
         data: {
           username: "branchadmin",
-          password: branchPassword,
+          password: branchAdminPassword,
           role: "BRANCH_ADMIN",
           branchId: branches[0].id,
         },
@@ -76,7 +69,7 @@ async function main() {
       prisma.user.create({
         data: {
           username: "admin_kandy",
-          password: branchPassword,
+          password: branchAdminPassword,
           role: "BRANCH_ADMIN",
           branchId: branches[1].id,
         },
@@ -84,7 +77,7 @@ async function main() {
       prisma.user.create({
         data: {
           username: "admin_galle",
-          password: branchPassword,
+          password: branchAdminPassword,
           role: "BRANCH_ADMIN",
           branchId: branches[2].id,
         },
@@ -110,18 +103,18 @@ async function main() {
     let inventoryCount = 0
     for (const branch of branches) {
       for (const item of inventoryItems) {
-        const quantity = Math.random() * 50 + 10 // 10-60 units
-        const daysToExpiry = Math.random() * 30 + 1 // 1-30 days
+        const quantity = Math.random() * 50 + 10
+        const daysToExpiry = Math.random() * 30 + 1
         const expiryDate = new Date()
         expiryDate.setDate(expiryDate.getDate() + daysToExpiry)
 
         await prisma.inventory.create({
           data: {
             itemName: item.name,
-            quantity: Number(quantity.toFixed(1)),
-            unit: item.unit,
+            quantity: quantity,
+            unit: item.unit as any,
             expiryDate,
-            purchaseCost: Number((item.cost * quantity).toFixed(0)),
+            purchaseCost: item.cost * quantity,
             branchId: branch.id,
           },
         })
@@ -130,7 +123,7 @@ async function main() {
     }
     console.log(`✅ Created ${inventoryCount} inventory items`)
 
-    // Create waste logs with realistic data over the past 90 days
+    // Create waste logs
     console.log("🗑️ Creating waste logs...")
     const wasteReasons = ["SPOILAGE", "OVERPRODUCTION", "PLATE_WASTE", "BUFFET_LEFTOVER"] as const
     let wasteLogCount = 0
@@ -139,16 +132,14 @@ async function main() {
       const date = new Date()
       date.setDate(date.getDate() - dayOffset)
 
-      // Create 2-8 waste entries per day across all branches
       const entriesPerDay = Math.floor(Math.random() * 7) + 2
 
       for (let i = 0; i < entriesPerDay; i++) {
         const randomBranch = branches[Math.floor(Math.random() * branches.length)]
         const randomItem = inventoryItems[Math.floor(Math.random() * inventoryItems.length)]
-        const quantity = Math.random() * 5 + 0.5 // 0.5-5.5 kg/units
-        const value = quantity * randomItem.cost * (0.8 + Math.random() * 0.4) // ±20% price variation
+        const quantity = Math.random() * 5 + 0.5
+        const value = quantity * randomItem.cost * (0.8 + Math.random() * 0.4)
 
-        // Add some randomness to the date within the day
         const wasteDate = new Date(date)
         wasteDate.setHours(Math.floor(Math.random() * 24))
         wasteDate.setMinutes(Math.floor(Math.random() * 60))
@@ -156,9 +147,9 @@ async function main() {
         await prisma.wasteLog.create({
           data: {
             itemName: randomItem.name,
-            quantity: Number(quantity.toFixed(1)),
-            unit: randomItem.unit,
-            value: Number(value.toFixed(0)),
+            quantity: quantity,
+            unit: randomItem.unit as any,
+            value: value,
             reason: wasteReasons[Math.floor(Math.random() * wasteReasons.length)],
             branchId: randomBranch.id,
             createdAt: wasteDate,
@@ -169,121 +160,19 @@ async function main() {
     }
     console.log(`✅ Created ${wasteLogCount} waste logs`)
 
-    // Create sample pending reviews
-    console.log("📝 Creating sample pending reviews...")
-    let reviewCount = 0
-
-    // Create pending CREATE reviews
-    for (let i = 0; i < 3; i++) {
-      const randomBranch = branches[Math.floor(Math.random() * branches.length)]
-      const randomItem = inventoryItems[Math.floor(Math.random() * inventoryItems.length)]
-      const branchAdmin = branchAdmins.find((admin) => admin.branchId === randomBranch.id)
-
-      if (branchAdmin) {
-        await prisma.wasteLogReview.create({
-          data: {
-            action: "CREATE",
-            status: "PENDING",
-            newData: {
-              itemName: randomItem.name,
-              quantity: Number((Math.random() * 5 + 0.5).toFixed(1)),
-              unit: randomItem.unit,
-              value: Number((Math.random() * 1000 + 100).toFixed(0)),
-              reason: wasteReasons[Math.floor(Math.random() * wasteReasons.length)],
-              branchId: randomBranch.id,
-            },
-            reason: `New ${randomItem.name} waste entry`,
-            createdBy: branchAdmin.id,
-          },
-        })
-        reviewCount++
-      }
-    }
-
-    // Create pending UPDATE reviews
-    const recentWasteLogs = await prisma.wasteLog.findMany({
-      take: 5,
-      orderBy: { createdAt: "desc" },
-    })
-
-    for (let i = 0; i < Math.min(2, recentWasteLogs.length); i++) {
-      const wasteLog = recentWasteLogs[i]
-      const branch = branches.find((b) => b.id === wasteLog.branchId)
-      const branchAdmin = branchAdmins.find((admin) => admin.branchId === branch?.id)
-
-      if (branchAdmin && wasteLog) {
-        await prisma.wasteLogReview.create({
-          data: {
-            wasteLogId: wasteLog.id,
-            action: "UPDATE",
-            status: "PENDING",
-            originalData: {
-              itemName: wasteLog.itemName,
-              quantity: wasteLog.quantity,
-              unit: wasteLog.unit,
-              value: wasteLog.value,
-              reason: wasteLog.reason,
-              branchId: wasteLog.branchId,
-            },
-            newData: {
-              itemName: wasteLog.itemName,
-              quantity: wasteLog.quantity + 1,
-              unit: wasteLog.unit,
-              value: wasteLog.value + 100,
-              reason: wasteLog.reason,
-              branchId: wasteLog.branchId,
-            },
-            reason: "Correcting quantity and value",
-            createdBy: branchAdmin.id,
-          },
-        })
-        reviewCount++
-      }
-    }
-
-    // Create a pending DELETE review
-    if (recentWasteLogs.length > 0) {
-      const wasteLogToDelete = recentWasteLogs[recentWasteLogs.length - 1]
-      const deleteBranch = branches.find((b) => b.id === wasteLogToDelete.branchId)
-      const deleteBranchAdmin = branchAdmins.find((admin) => admin.branchId === deleteBranch?.id)
-
-      if (deleteBranchAdmin && wasteLogToDelete) {
-        await prisma.wasteLogReview.create({
-          data: {
-            wasteLogId: wasteLogToDelete.id,
-            action: "DELETE",
-            status: "PENDING",
-            originalData: {
-              itemName: wasteLogToDelete.itemName,
-              quantity: wasteLogToDelete.quantity,
-              unit: wasteLogToDelete.unit,
-              value: wasteLogToDelete.value,
-              reason: wasteLogToDelete.reason,
-              branchId: wasteLogToDelete.branchId,
-            },
-            reason: "Incorrect entry - needs to be removed",
-            createdBy: deleteBranchAdmin.id,
-          },
-        })
-        reviewCount++
-      }
-    }
-
-    console.log(`✅ Created ${reviewCount} sample reviews`)
-
     console.log("\n🎉 Test data loaded successfully!")
     console.log("\n📊 Summary:")
     console.log(`- ${branches.length} branches`)
-    console.log(`- ${branchAdmins.length + 1} users (1 super admin, ${branchAdmins.length} branch admins)`)
+    console.log(`- ${branchAdmins.length + 1} users`)
     console.log(`- ${inventoryCount} inventory items`)
     console.log(`- ${wasteLogCount} waste log entries`)
-    console.log(`- ${reviewCount} pending reviews`)
 
     console.log("\n🔑 Login credentials:")
     console.log("Super Admin - Username: superadmin, Password: admin123")
     console.log("Branch Admin (Main) - Username: branchadmin, Password: branch123")
     console.log("Branch Admin (Kandy) - Username: admin_kandy, Password: branch123")
     console.log("Branch Admin (Galle) - Username: admin_galle, Password: branch123")
+
   } catch (error) {
     console.error("❌ Error loading test data:", error)
     throw error

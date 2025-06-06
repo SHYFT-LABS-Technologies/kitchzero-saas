@@ -1,3 +1,6 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,115 +10,30 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  username  String   @unique
-  password  String
-  role      UserRole @default(BRANCH_ADMIN)
-  branchId  String?
-  branch    Branch?  @relation(fields: [branchId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Review system
-  reviewsCreated   WasteLogReview[] @relation("ReviewCreatedBy")
-  reviewsApproved  WasteLogReview[] @relation("ReviewApprovedBy")
-
-  @@map("users")
-}
-
-model Branch {
-  id          String      @id @default(cuid())
-  name        String
-  location    String
-  users       User[]
-  inventory   Inventory[]
-  wasteLogs   WasteLog[]
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-
-  @@map("branches")
-}
-
-model Inventory {
-  id           String    @id @default(cuid())
-  itemName     String
-  quantity     Float
-  unit         String
-  expiryDate   DateTime
-  purchaseCost Float
-  branchId     String
-  branch       Branch    @relation(fields: [branchId], references: [id])
-  wasteLogs    WasteLog[]
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-
-  @@map("inventory")
-}
-
-model WasteLog {
-  id          String     @id @default(cuid())
-  itemName    String
-  quantity    Float
-  unit        String
-  value       Float
-  reason      WasteReason
-  photo       String?
-  branchId    String
-  branch      Branch     @relation(fields: [branchId], references: [id])
-  inventoryId String?
-  inventory   Inventory? @relation(fields: [inventoryId], references: [id])
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-
-  // Review system
-  reviews     WasteLogReview[]
-
-  @@map("waste_logs")
-}
-
-model WasteLogReview {
-  id          String            @id @default(cuid())
-  wasteLogId  String?
-  wasteLog    WasteLog?         @relation(fields: [wasteLogId], references: [id])
-  
-  // Action type
-  action      ReviewAction      // CREATE, UPDATE, DELETE
-  status      ReviewStatus      @default(PENDING)
-  
-  // Original data (for updates/deletes)
-  originalData Json?
-  
-  // New data (for creates/updates)
-  newData     Json?
-  
-  // Review details
-  reason      String?           // Reason for the change
-  createdBy   String
-  creator     User              @relation("ReviewCreatedBy", fields: [createdBy], references: [id])
-  
-  approvedBy  String?
-  approver    User?             @relation("ReviewApprovedBy", fields: [approvedBy], references: [id])
-  
-  reviewNotes String?           // Notes from the reviewer
-  
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-  reviewedAt  DateTime?
-
-  @@map("waste_log_reviews")
-}
-
-enum UserRole {
+enum Role {
   SUPER_ADMIN
   BRANCH_ADMIN
 }
 
 enum WasteReason {
-  OVERPRODUCTION
   SPOILAGE
+  OVERPRODUCTION
   PLATE_WASTE
   BUFFET_LEFTOVER
+}
+
+enum Unit {
+  kg
+  g
+  pieces
+  liters
+  portions
+}
+
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum ReviewAction {
@@ -124,8 +42,169 @@ enum ReviewAction {
   DELETE
 }
 
-enum ReviewStatus {
-  PENDING
-  APPROVED
-  REJECTED
+model User {
+  id       String @id @default(cuid())
+  username String @unique
+  password String
+  role     Role
+  branchId String?
+  branch   Branch? @relation(fields: [branchId], references: [id])
+  
+  // Relations
+  sessions         UserSession[]
+  wasteLogReviews  WasteLogReview[] @relation("ReviewCreator")
+  approvedReviews  WasteLogReview[] @relation("ReviewApprover")
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Branch {
+  id       String @id @default(cuid())
+  name     String @unique
+  location String
+  
+  // Relations
+  users     User[]
+  inventory Inventory[]
+  wasteLogs WasteLog[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("branches")
+}
+
+model Inventory {
+  id           String   @id @default(cuid())
+  itemName     String
+  quantity     Decimal
+  unit         Unit
+  expiryDate   DateTime
+  purchaseCost Decimal
+  branchId     String
+  branch       Branch   @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId])
+  @@index([expiryDate])
+  @@map("inventory")
+}
+
+model WasteLog {
+  id       String      @id @default(cuid())
+  itemName String
+  quantity Decimal
+  unit     Unit
+  value    Decimal
+  reason   WasteReason
+  photo    String?
+  branchId String
+  branch   Branch      @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  
+  // Relations
+  reviews WasteLogReview[]
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId])
+  @@index([createdAt])
+  @@index([reason])
+  @@map("waste_logs")
+}
+
+model WasteLogReview {
+  id           String       @id @default(cuid())
+  wasteLogId   String?
+  wasteLog     WasteLog?    @relation(fields: [wasteLogId], references: [id], onDelete: Cascade)
+  action       ReviewAction
+  status       ReviewStatus @default(PENDING)
+  originalData Json?
+  newData      Json?
+  reason       String?
+  reviewNotes  String?
+  
+  // Relations
+  createdBy   String
+  creator     User    @relation("ReviewCreator", fields: [createdBy], references: [id])
+  approvedBy  String?
+  approver    User?   @relation("ReviewApprover", fields: [approvedBy], references: [id])
+  
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  reviewedAt DateTime?
+
+  @@index([status])
+  @@index([createdBy])
+  @@index([createdAt])
+  @@map("waste_log_reviews")
+}
+
+// Security Tables
+model UserSession {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt    DateTime
+  lastActivity DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([lastActivity])
+  @@map("user_sessions")
+}
+
+model RateLimit {
+  id           String   @id @default(cuid())
+  identifier   String   // user:123 or ip:192.168.1.1
+  endpoint     String   // login, api_read, api_write, etc.
+  requestCount Int      @default(1)
+  windowStart  DateTime
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([identifier, endpoint, windowStart])
+  @@index([identifier, endpoint])
+  @@index([expiresAt])
+  @@map("rate_limits")
+}
+
+model LoginAttempt {
+  id            String   @id @default(cuid())
+  username      String
+  clientIp      String
+  success       Boolean
+  failureReason String?
+  createdAt     DateTime @default(now())
+
+  @@index([username, createdAt])
+  @@index([clientIp, createdAt])
+  @@index([createdAt])
+  @@map("login_attempts")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String
+  resource   String
+  resourceId String
+  userId     String?
+  username   String?
+  userRole   String?
+  branchId   String?
+  details    Json?
+  timestamp  DateTime @default(now())
+  
+  @@index([userId])
+  @@index([action])
+  @@index([resource])
+  @@index([timestamp])
+  @@map("audit_logs")
 }
