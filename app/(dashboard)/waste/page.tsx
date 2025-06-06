@@ -3,11 +3,12 @@
 import type React from "react"
 
 import { useEffect, useState } from "react"
-import { useAuth } from "@/components/auth-provider"
+import { useAuth } from '@/components/auth-provider'; // Standard import
+import { fetchWithCsrf } from '@/lib/api-client'; // Added import
 import DeleteConfirmationModal from "@/components/ui/delete-confirmation-modal"
 import { ToastContainer, useToast } from "@/components/ui/toast-notification"
 import type { WasteLog, Branch } from "@/lib/types"
-import { api, ApiClientError } from "@/lib/api-client"
+// Removed: import { api, ApiClientError } from "@/lib/api-client";
 import { FormField } from "@/components/ui/form-field"
 import {
   Plus,
@@ -68,7 +69,8 @@ interface WasteLogReview {
 }
 
 export default function WastePage() {
-  const { user } = useAuth()
+  // Obtain user session and CSRF token from authentication context.
+  const { user, csrfToken } = useAuth();
   const { toasts, addToast, removeToast } = useToast()
   const [wasteLogs, setWasteLogs] = useState<WasteLogWithBranch[]>([])
   const [branches, setBranches] = useState<Branch[]>([])
@@ -185,9 +187,27 @@ export default function WastePage() {
     try {
       setLoading(true)
 
-      const response = await api.post('/api/waste-logs', formData)
+      // API call with CSRF protection.
+      const response = await fetchWithCsrf('/api/waste-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      }, csrfToken);
 
-      if (response.requiresApproval) {
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Failed to submit waste log and parse error details.' }));
+        // Attempt to replicate ApiClientError style error handling
+        if (errorData.details && Array.isArray(errorData.details)) {
+          addValidationErrors(errorData.details, "Please fix the following errors");
+        } else {
+          addToast({ type: "error", title: "Error", message: errorData.error || 'Failed to submit waste log.'});
+        }
+        throw new Error(errorData.error || 'Failed to submit waste log');
+      }
+
+      const result = await response.json();
+
+      if (result.requiresApproval) {
         addToast({
           type: "info",
           title: "Submitted for Approval",
@@ -205,27 +225,16 @@ export default function WastePage() {
       resetForm()
       fetchWasteLogs()
 
-    } catch (error) {
-      if (error instanceof ApiClientError) {
-        if (error.details && error.details.length > 0) {
-          // Handle validation errors
-          addValidationErrors(error.details, "Please fix the following errors")
-        } else {
-          // Handle other API errors
-          addToast({
-            type: "error",
-            title: "Error",
-            message: error.error
-          })
-        }
-      } else {
-        // Handle unexpected errors
-        addToast({
-          type: "error",
-          title: "Network Error",
-          message: "Failed to submit. Please try again."
-        })
+    } catch (error) { // Error is already an Error instance or has been made one
+      // Avoid re-wrapping if it's already a known error structure from above
+      if (!(error instanceof Error && error.message.includes('Failed to submit waste log'))) {
+         addToast({
+           type: "error",
+           title: "Submission Error",
+           message: error instanceof Error ? error.message : "An unexpected error occurred. Please try again."
+         })
       }
+      console.error("handleSubmit error:", error); // Keep console log for debugging
     } finally {
       setLoading(false)
     }
@@ -236,11 +245,12 @@ export default function WastePage() {
     if (!editingLog) return
 
     try {
-      const response = await fetch(`/api/waste-logs/${editingLog.id}`, {
+      // API call with CSRF protection.
+      const response = await fetchWithCsrf(`/api/waste-logs/${editingLog.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
-      })
+      }, csrfToken);
 
       if (response.ok) {
         const result = await response.json()
@@ -280,11 +290,12 @@ export default function WastePage() {
     setDeleteModal((prev) => ({ ...prev, isLoading: true }))
 
     try {
-      const response = await fetch(`/api/waste-logs/${deleteModal.wasteLog.id}`, {
+      // API call with CSRF protection.
+      const response = await fetchWithCsrf(`/api/waste-logs/${deleteModal.wasteLog.id}`, {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason }),
-      })
+      }, csrfToken);
 
       if (response.ok) {
         const result = await response.json()
@@ -323,11 +334,12 @@ export default function WastePage() {
     if (!reviewNotes) return
 
     try {
-      const response = await fetch(`/api/reviews/${reviewId}`, {
+      // API call with CSRF protection.
+      const response = await fetchWithCsrf(`/api/reviews/${reviewId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, reviewNotes }),
-      })
+      }, csrfToken);
 
       if (response.ok) {
         addToast({

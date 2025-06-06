@@ -3,7 +3,8 @@
 import type React from "react"
 
 import { useEffect, useState } from "react"
-import { useAuth } from "@/components/auth-provider"
+import { useAuth } from '@/components/auth-provider'; // Standard import
+import { fetchWithCsrf } from '@/lib/api-client'; // Added import
 import DeleteConfirmationModal from "@/components/ui/delete-confirmation-modal"
 import { ToastContainer, useToast } from "@/components/ui/toast-notification"
 import type { InventoryItem, Branch } from "@/lib/types"
@@ -37,7 +38,8 @@ type SortField = "itemName" | "quantity" | "expiryDate" | "purchaseCost" | "crea
 type SortOrder = "asc" | "desc"
 
 export default function InventoryPage() {
-  const { user } = useAuth()
+  // Obtain user session and CSRF token from authentication context.
+  const { user, csrfToken } = useAuth();
   const { toasts, addToast, removeToast } = useToast()
   const [inventory, setInventory] = useState<InventoryItemWithBranch[]>([])
   const [branches, setBranches] = useState<Branch[]>([])
@@ -137,7 +139,8 @@ export default function InventoryPage() {
     try {
       console.log("Submitting inventory form:", formData)
 
-      const response = await fetch("/api/inventory", {
+      // API call with CSRF protection.
+      const response = await fetchWithCsrf("/api/inventory", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -148,7 +151,7 @@ export default function InventoryPage() {
           purchaseCost: Number(formData.purchaseCost),
           branchId: formData.branchId || undefined,
         }),
-      })
+      }, csrfToken);
 
       const result = await response.json()
       console.log("Inventory submission result:", result)
@@ -186,7 +189,8 @@ export default function InventoryPage() {
     try {
       console.log("Updating inventory item:", formData)
 
-      const response = await fetch(`/api/inventory/${editingItem.id}`, {
+      // API call with CSRF protection.
+      const response = await fetchWithCsrf(`/api/inventory/${editingItem.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -197,7 +201,7 @@ export default function InventoryPage() {
           purchaseCost: Number(formData.purchaseCost),
           branchId: formData.branchId || undefined,
         }),
-      })
+      }, csrfToken);
 
       const result = await response.json()
       console.log("Inventory update result:", result)
@@ -234,9 +238,10 @@ export default function InventoryPage() {
     setDeleteModal((prev) => ({ ...prev, isLoading: true }))
 
     try {
-      const response = await fetch(`/api/inventory/${deleteModal.item.id}`, {
+      // API call with CSRF protection.
+      const response = await fetchWithCsrf(`/api/inventory/${deleteModal.item.id}`, {
         method: "DELETE",
-      })
+      }, csrfToken);
 
       if (response.ok) {
         addToast({

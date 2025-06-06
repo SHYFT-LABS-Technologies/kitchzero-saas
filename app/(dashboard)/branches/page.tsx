@@ -2,7 +2,8 @@
 
 import type React from "react"
 import { useEffect, useState } from "react"
-import { useAuth } from "@/components/auth-provider"
+import { useAuth } from '@/components/auth-provider'; // Standard import
+import { fetchWithCsrf } from '@/lib/api-client'; // Added import
 import type { Branch, User } from "@/lib/types"
 import {
   Plus,
@@ -29,7 +30,8 @@ interface BranchWithStats extends Branch {
 }
 
 export default function BranchesPage() {
-  const { user } = useAuth()
+  // Obtain user session and CSRF token from authentication context.
+  const { user, csrfToken } = useAuth();
   const [branches, setBranches] = useState<BranchWithStats[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
@@ -97,14 +99,15 @@ export default function BranchesPage() {
         return
       }
 
-      const response = await fetch(url, {
+      // API call with CSRF protection.
+      const response = await fetchWithCsrf(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: branchFormData.name.trim(),
           location: branchFormData.location.trim()
         }),
-      })
+      }, csrfToken);
 
       const result = await response.json()
 
@@ -190,11 +193,12 @@ export default function BranchesPage() {
 
       console.log("Submitting user data:", submitData)
 
-      const response = await fetch(url, {
+      // API call with CSRF protection.
+      const response = await fetchWithCsrf(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(submitData),
-      })
+      }, csrfToken);
 
       const result = await response.json()
       console.log("User submission result:", result)
@@ -230,9 +234,10 @@ export default function BranchesPage() {
     if (!confirm("Are you sure you want to delete this branch? This will also delete all associated inventory and waste logs.")) return
 
     try {
-      const response = await fetch(`/api/branches/${branchId}`, {
+      // API call with CSRF protection.
+      const response = await fetchWithCsrf(`/api/branches/${branchId}`, {
         method: "DELETE",
-      })
+      }, csrfToken);
 
       const result = await response.json()
 
@@ -261,9 +266,10 @@ export default function BranchesPage() {
     if (!confirm("Are you sure you want to delete this user?")) return
 
     try {
-      const response = await fetch(`/api/users/${userId}`, {
+      // API call with CSRF protection.
+      const response = await fetchWithCsrf(`/api/users/${userId}`, {
         method: "DELETE",
-      })
+      }, csrfToken);
 
       const result = await response.json()
 

@@ -1,7 +1,8 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useAuth } from "@/components/auth-provider"
+import { useAuth } from '@/components/auth-provider'; // Standard import
+import { fetchWithCsrf } from '@/lib/api-client'; // Added import
 import { ToastContainer, useToast } from "@/components/ui/toast-notification"
 import {
   Clock,
@@ -63,7 +64,8 @@ interface WasteLogReview {
 }
 
 export default function ReviewsPage() {
-  const { user } = useAuth()
+  // Obtain user session and CSRF token from authentication context.
+  const { user, csrfToken } = useAuth();
   const { toasts, addToast, removeToast } = useToast()
   const [allReviews, setAllReviews] = useState<WasteLogReview[]>([]) // For stats cards
   const [reviews, setReviews] = useState<WasteLogReview[]>([]) // For filtered display
@@ -148,11 +150,12 @@ export default function ReviewsPage() {
     setProcessingReview(reviewId)
 
     try {
-      const response = await fetch(`/api/reviews/${reviewId}`, {
+      // API call with CSRF protection.
+      const response = await fetchWithCsrf(`/api/reviews/${reviewId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, reviewNotes }),
-      })
+      }, csrfToken);
 
       if (response.ok) {
         addToast({
