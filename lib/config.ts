@@ -31,6 +31,8 @@ export const config = validateEnv()
 export const jwtConfig = {
   accessTokenExpiry: '15m',
   refreshTokenExpiry: '7d',
+  accessTokenExpiryInSeconds: 15 * 60, // 15 minutes in seconds
+  refreshTokenExpiryInSeconds: 7 * 24 * 60 * 60, // 7 days in seconds
   issuer: 'kitchzero',
   audience: 'kitchzero-app'
 }

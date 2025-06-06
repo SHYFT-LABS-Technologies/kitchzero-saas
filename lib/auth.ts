@@ -43,19 +43,28 @@ export function generateAccessToken(user: AuthUser): string {
   })
 }
 
-export function generateRefreshToken(userId: string, sessionId: string): string {
+// Generates a new refresh token.
+// Includes a jti (JWT ID) in the token payload, which is a unique identifier for this specific token.
+// This jti is used to implement refresh token rotation: the jti of the current valid refresh token
+// is stored in the user's session, and only a token with a matching jti can be used to get a new access token.
+// Returns an object containing both the opaque token string and its jti.
+export function generateRefreshToken(userId: string, sessionId: string): { token: string, jti: string } {
+  // jti (JWT ID) is generated and included in the refresh token to uniquely identify it for rotation purposes.
+  const jti = crypto.randomUUID()
   const payload = {
     userId,
     sessionId,
+    jti,
     type: 'refresh'
   }
 
-  return jwt.sign(payload, config.JWT_REFRESH_SECRET, {
+  const token = jwt.sign(payload, config.JWT_REFRESH_SECRET, {
     expiresIn: jwtConfig.refreshTokenExpiry,
     issuer: jwtConfig.issuer,
     audience: jwtConfig.audience,
     algorithm: 'HS256'
   })
+  return { token, jti }
 }
 
 export function verifyAccessToken(token: string): TokenPayload | null {
@@ -96,6 +105,7 @@ export async function createSession(userId: string): Promise<string> {
       id: sessionId,
       userId,
       expiresAt,
+      // currentRefreshTokenJti will be set after token generation
       lastActivity: new Date()
     }
   })
@@ -168,7 +178,16 @@ export async function authenticateUser(
     }
 
     await clearFailedLogins(username, clientIp)
-    const sessionId = await createSession(user.id)
+    const sessionId = await createSession(user.id) // Create session first
+    const { token: refreshToken, jti: refreshTokenJti } = generateRefreshToken(user.id, sessionId) // Generate token with actual sessionId
+
+    // Now update the session with the JTI.
+    // This links the session to the initially issued refresh token, starting the rotation chain.
+    // When the user tries to refresh, the JTI from the presented refresh token must match this stored JTI.
+    await prisma.userSession.update({
+      where: { id: sessionId },
+      data: { currentRefreshTokenJti: refreshTokenJti }
+    })
 
     const authUser: AuthUser = {
       id: user.id,
@@ -179,9 +198,8 @@ export async function authenticateUser(
     }
 
     const accessToken = generateAccessToken(authUser)
-    const refreshToken = generateRefreshToken(user.id, sessionId)
-
-    return { user: authUser, accessToken, refreshToken }
+    // No need to regenerate, refreshToken is already the final one.
+    return { user: authUser, accessToken, refreshToken: refreshToken }
   } catch (error) {
     if (error instanceof Error) {
       throw error

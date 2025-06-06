@@ -153,6 +153,7 @@ model UserSession {
   expiresAt    DateTime
   lastActivity DateTime @default(now())
   createdAt    DateTime @default(now())
+  currentRefreshTokenJti String? @unique
 
   @@index([userId])
   @@index([expiresAt])
