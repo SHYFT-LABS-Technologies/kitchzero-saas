@@ -1,129 +1,66 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { getAuthUser } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
-import { inventorySchema } from "@/lib/validation"
+import { type NextRequest, NextResponse } from "next/server";
+import { getAuthUser } from "@/lib/auth";
+import * as inventoryApiService from "@/lib/api_services/inventoryApiService";
+import { inventorySchema } from "@/lib/validation"; // For creation
 import {
   handleApiError,
-  checkRateLimitEnhanced,
-  createSecureErrorResponse // Added for CSRF
-} from "@/lib/api-utils"
-import { verifyCsrfToken } from "@/lib/security"; // Import CSRF verification
+  validateAndParseBody,
+  createSecureSuccessResponse,
+  createSecureErrorResponse, // Keep for CSRF error
+  checkRateLimitEnhanced
+} from "@/lib/api-utils";
+import { verifyCsrfToken } from "@/lib/security";
+import type { InventoryData } from "@/lib/types";
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getAuthUser(request)
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const authUser = await getAuthUser(request);
+    if (!authUser) {
+      // getAuthUser should throw if no session, but as a safeguard:
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    await checkRateLimitEnhanced(request, user, 'api_read');
+    await checkRateLimitEnhanced(request, authUser, 'api_read');
 
-    const whereClause = user.role === "SUPER_ADMIN" ? {} : { branchId: user.branchId }
+    const inventoryItems = await inventoryApiService.fetchAllInventory(authUser);
 
-    const inventory = await prisma.inventory.findMany({
-      where: whereClause,
-      include: {
-        branch: {
-          select: { id: true, name: true, location: true },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    })
+    // The service layer now returns items with branch info included as per repository
+    return createSecureSuccessResponse({ inventory: inventoryItems }, 200);
 
-    return NextResponse.json({ inventory })
   } catch (error) {
-    return handleApiError(error)
+    return handleApiError(error);
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await getAuthUser(request)
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const authUser = await getAuthUser(request);
+     if (!authUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     if (!verifyCsrfToken(request)) {
-      // Log the CSRF failure for server-side observability
       console.warn(`CSRF validation failed for request: ${request.method} ${request.url}`);
       return createSecureErrorResponse('Invalid CSRF token', 403);
     }
 
-    await checkRateLimitEnhanced(request, user, 'api_write');
+    await checkRateLimitEnhanced(request, authUser, 'api_write');
 
-    // Get and validate request body
-    const body = await request.json()
-    console.log("Inventory creation request:", body)
+    const validatedData = await validateAndParseBody(request, inventorySchema);
 
-    // Manual validation to avoid Zod issues
-    if (!body.itemName || body.itemName.trim().length === 0) {
-      return NextResponse.json({ error: "Item name is required" }, { status: 400 })
-    }
+    // Convert expiryDate to Date object if it's a string
+    // inventorySchema already ensures expiryDate is a string in YYYY-MM-DD format
+    // The service layer (addNewInventoryItem) will convert it to a Date object.
+    const itemData: InventoryData = {
+        ...validatedData,
+        // expiryDate is already a string from validatedData, service will handle new Date()
+    };
 
-    if (!body.quantity || isNaN(Number(body.quantity)) || Number(body.quantity) <= 0) {
-      return NextResponse.json({ error: "Valid quantity is required" }, { status: 400 })
-    }
+    const newItem = await inventoryApiService.addNewInventoryItem(itemData, authUser);
 
-    if (!body.unit || !['kg', 'g', 'pieces', 'liters'].includes(body.unit)) {
-      return NextResponse.json({ error: "Valid unit is required" }, { status: 400 })
-    }
+    return createSecureSuccessResponse({ item: newItem, message: "Inventory item created successfully" }, 201);
 
-    if (!body.expiryDate) {
-      return NextResponse.json({ error: "Expiry date is required" }, { status: 400 })
-    }
-
-    if (!body.purchaseCost || isNaN(Number(body.purchaseCost)) || Number(body.purchaseCost) <= 0) {
-      return NextResponse.json({ error: "Valid purchase cost is required" }, { status: 400 })
-    }
-
-    // Validate expiry date
-    const expiryDate = new Date(body.expiryDate)
-    if (isNaN(expiryDate.getTime())) {
-      return NextResponse.json({ error: "Invalid expiry date" }, { status: 400 })
-    }
-
-    // Branch admins can only add to their own branch
-    const targetBranchId = user.role === "SUPER_ADMIN" 
-      ? body.branchId || user.branchId 
-      : user.branchId
-
-    if (!targetBranchId) {
-      return NextResponse.json({ error: "Branch ID is required" }, { status: 400 })
-    }
-
-    // Verify branch exists
-    const branchExists = await prisma.branch.findUnique({
-      where: { id: targetBranchId }
-    })
-
-    if (!branchExists) {
-      return NextResponse.json({ error: "Selected branch does not exist" }, { status: 400 })
-    }
-
-    const item = await prisma.inventory.create({
-      data: {
-        itemName: body.itemName.trim(),
-        quantity: Number(body.quantity),
-        unit: body.unit,
-        expiryDate: expiryDate,
-        purchaseCost: Number(body.purchaseCost),
-        branchId: targetBranchId,
-      },
-      include: {
-        branch: {
-          select: { id: true, name: true, location: true },
-        },
-      },
-    })
-
-    console.log("Inventory item created:", item)
-
-    return NextResponse.json({ 
-      item,
-      message: "Inventory item created successfully"
-    })
   } catch (error) {
-    console.error("Error creating inventory item:", error)
     return handleApiError(error)
   }
 }

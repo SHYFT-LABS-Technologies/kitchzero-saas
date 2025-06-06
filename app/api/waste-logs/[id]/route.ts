@@ -1,226 +1,106 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { getAuthUser } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
-import { updateWasteLogSchema, deleteWithReasonSchema } from "@/lib/validation"
-import { 
-  handleApiError, 
-  validateAndParseBody, 
-  validateUrlParam,
+import { type NextRequest, NextResponse } from "next/server";
+import { getAuthUser } from "@/lib/auth";
+import * as wasteLogApiService from "@/lib/api_services/wasteLogApiService";
+import { updateWasteLogSchema, deleteWithReasonSchema } from "@/lib/validation";
+import {
+  handleApiError,
+  validateAndParseBody,
+  createSecureSuccessResponse,
+  createSecureErrorResponse,
   checkRateLimitEnhanced,
-  checkPermission,
-  createSecureErrorResponse // Added for CSRF
-} from "@/lib/api-utils"
-import { verifyCsrfToken } from "@/lib/security"; // Import CSRF verification
+  validateRouteParams, // Changed from validateUrlParam
+  // checkPermission // Assuming permissions are handled in service or not needed here
+} from "@/lib/api-utils";
+import { verifyCsrfToken } from "@/lib/security";
+import type { WasteLogData } from "@/lib/types";
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const user = await getAuthUser(request)
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const authUser = await getAuthUser(request);
+    if (!authUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    await checkRateLimitEnhanced(request, authUser, 'api_read');
+    const { id: wasteLogId } = validateRouteParams(params, { id: 'uuid' });
 
-    // Rate limiting
-    await checkRateLimitEnhanced(request, user, 'api_read');
+    const wasteLog = await wasteLogApiService.findWasteLogById(wasteLogId, authUser);
+    return createSecureSuccessResponse({ wasteLog });
 
-    // Validate ID parameter
-    const wasteLogId = validateUrlParam("wasteLogId", params.id)
-
-    const whereClause = user.role === "SUPER_ADMIN" ? {} : { branchId: user.branchId }
-
-    const wasteLog = await prisma.wasteLog.findFirst({
-      where: {
-        id: wasteLogId,
-        ...whereClause,
-      },
-      include: {
-        branch: {
-          select: { id: true, name: true, location: true },
-        },
-      },
-    })
-
-    if (!wasteLog) {
-      return NextResponse.json({ error: "Waste log not found" }, { status: 404 })
-    }
-
-    return NextResponse.json({ wasteLog })
   } catch (error) {
-    return handleApiError(error)
+    return handleApiError(error);
   }
 }
 
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const user = await getAuthUser(request)
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const authUser = await getAuthUser(request);
+    if (!authUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     if (!verifyCsrfToken(request)) {
-      // Log the CSRF failure for server-side observability
       console.warn(`CSRF validation failed for request: ${request.method} ${request.url}`);
       return createSecureErrorResponse('Invalid CSRF token', 403);
     }
+    await checkRateLimitEnhanced(request, authUser, 'api_write');
+    const { id: wasteLogId } = validateRouteParams(params, { id: 'uuid' });
 
-    // Rate limiting
-    await checkRateLimitEnhanced(request, user, 'api_write');
+    const validatedData = await validateAndParseBody(request, updateWasteLogSchema);
 
-    // Validate ID parameter
-    const wasteLogId = validateUrlParam("wasteLogId", params.id)
+    const result = await wasteLogApiService.modifyWasteLog(wasteLogId, validatedData as Partial<WasteLogData>, authUser);
 
-    // Validate request body
-    const validatedData = await validateAndParseBody(request, updateWasteLogSchema)
-
-    // Get the existing waste log
-    const existingWasteLog = await prisma.wasteLog.findFirst({
-      where: {
-        id: wasteLogId,
-        ...(user.role === "SUPER_ADMIN" ? {} : { branchId: user.branchId }),
-      },
-    })
-
-    if (!existingWasteLog) {
-      return NextResponse.json({ error: "Waste log not found" }, { status: 404 })
+    if ('reviewId' in result) {
+        return createSecureSuccessResponse(result, 202); // Accepted for pending review
+    } else {
+        return createSecureSuccessResponse({ wasteLog: result, message: "Waste log updated successfully" });
     }
 
-    // Parse the waste date if provided
-    const parsedWasteDate = validatedData.wasteDate 
-      ? new Date(validatedData.wasteDate) 
-      : existingWasteLog.createdAt
-
-    // Validate date is not in future
-    if (parsedWasteDate > new Date()) {
-      return NextResponse.json(
-        { error: "Waste date cannot be in the future" },
-        { status: 400 }
-      )
-    }
-
-    // Super admins can update directly
-    if (user.role === "SUPER_ADMIN") {
-      // Build update data object, only including provided fields
-      const updateData: any = {
-        updatedAt: new Date(),
-      }
-
-      if (validatedData.itemName !== undefined) updateData.itemName = validatedData.itemName
-      if (validatedData.quantity !== undefined) updateData.quantity = validatedData.quantity
-      if (validatedData.unit !== undefined) updateData.unit = validatedData.unit
-      if (validatedData.value !== undefined) updateData.value = validatedData.value
-      if (validatedData.reason !== undefined) updateData.reason = validatedData.reason
-      if (validatedData.photo !== undefined) updateData.photo = validatedData.photo || null
-      if (validatedData.branchId !== undefined) updateData.branchId = validatedData.branchId
-      if (validatedData.wasteDate !== undefined) updateData.createdAt = parsedWasteDate
-
-      const updatedWasteLog = await prisma.wasteLog.update({
-        where: { id: wasteLogId },
-        data: updateData,
-        include: {
-          branch: {
-            select: { id: true, name: true, location: true },
-          },
-        },
-      })
-
-      return NextResponse.json({ 
-        wasteLog: updatedWasteLog,
-        message: "Waste log updated successfully"
-      })
-    }
-
-    // Branch admins need approval
-    const review = await prisma.wasteLogReview.create({
-      data: {
-        wasteLogId,
-        action: "UPDATE",
-        originalData: {
-          ...existingWasteLog,
-          wasteDate: existingWasteLog.createdAt.toISOString().split("T")[0],
-        },
-        newData: {
-          ...validatedData,
-          wasteDate: parsedWasteDate.toISOString().split("T")[0],
-        },
-        reason: "Update request",
-        createdBy: user.id,
-        status: "PENDING"
-      },
-    })
-
-    return NextResponse.json({
-      message: "Update request submitted for approval",
-      reviewId: review.id,
-      requiresApproval: true,
-    })
   } catch (error) {
-    return handleApiError(error)
+    return handleApiError(error);
   }
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   try {
-    const user = await getAuthUser(request)
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const authUser = await getAuthUser(request);
+    if (!authUser) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     if (!verifyCsrfToken(request)) {
-      // Log the CSRF failure for server-side observability
       console.warn(`CSRF validation failed for request: ${request.method} ${request.url}`);
       return createSecureErrorResponse('Invalid CSRF token', 403);
     }
+    await checkRateLimitEnhanced(request, authUser, 'api_delete');
+    const { id: wasteLogId } = validateRouteParams(params, { id: 'uuid' });
 
-    // Rate limiting
-    await checkRateLimitEnhanced(request, user, 'api_delete');
-
-    // Validate ID parameter
-    const wasteLogId = validateUrlParam("wasteLogId", params.id)
-
-    // Get the existing waste log
-    const existingWasteLog = await prisma.wasteLog.findFirst({
-      where: {
-        id: wasteLogId,
-        ...(user.role === "SUPER_ADMIN" ? {} : { branchId: user.branchId }),
-      },
-    })
-
-    if (!existingWasteLog) {
-      return NextResponse.json({ error: "Waste log not found" }, { status: 404 })
+    let reason: string | undefined;
+    // For DELETE, reason might be in body if user is BRANCH_ADMIN (as per existing logic)
+    // SUPER_ADMIN might not need to provide a reason.
+    // The service layer `removeWasteLog` expects `deletionReason: string | undefined`
+    if (authUser.role === "BRANCH_ADMIN") {
+        // Only parse body for reason if branch admin, as super admin might not send a body
+        // And parsing an empty body can cause errors.
+        // A more robust way would be to check Content-Type header or try-catch the request.json()
+        const contentLength = request.headers.get('content-length');
+        if (contentLength && parseInt(contentLength, 10) > 0) {
+            const body = await validateAndParseBody(request, deleteWithReasonSchema);
+            reason = body.reason;
+        } else {
+            // If BRANCH_ADMIN and no reason provided in body, this might be an issue if reason is mandatory
+            // The service layer `removeWasteLog` handles if reason is undefined but required by role.
+        }
     }
 
-    // Super admins can delete directly
-    if (user.role === "SUPER_ADMIN") {
-      await prisma.wasteLog.delete({
-        where: { id: wasteLogId },
-      })
-      return NextResponse.json({ 
-        message: "Waste log deleted successfully" 
-      })
+    const result = await wasteLogApiService.removeWasteLog(wasteLogId, reason, authUser);
+
+    if ('reviewId' in result) {
+        return createSecureSuccessResponse(result, 202); // Accepted for pending review
+    } else {
+        return createSecureSuccessResponse({ message: result.message });
     }
 
-    // Branch admins need approval and must provide reason
-    const { reason } = await validateAndParseBody(request, deleteWithReasonSchema)
-
-    const review = await prisma.wasteLogReview.create({
-      data: {
-        wasteLogId,
-        action: "DELETE",
-        originalData: {
-          ...existingWasteLog,
-          date: existingWasteLog.createdAt.toISOString().split('T')[0]
-        },
-        reason,
-        createdBy: user.id,
-        status: "PENDING"
-      },
-    })
-
-    return NextResponse.json({
-      message: "Delete request submitted for approval",
-      reviewId: review.id,
-      requiresApproval: true,
-    })
   } catch (error) {
-    return handleApiError(error)
+    return handleApiError(error);
   }
 }
