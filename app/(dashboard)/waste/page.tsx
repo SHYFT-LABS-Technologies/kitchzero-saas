@@ -1,15 +1,14 @@
-"use client"
+"use client";
 
-import type React from "react"
-
-import { useEffect, useState } from "react"
-import { useAuth } from '@/components/auth-provider'; // Standard import
-import { fetchWithCsrf } from '@/lib/api-client'; // Added import
-import DeleteConfirmationModal from "@/components/ui/delete-confirmation-modal"
-import { ToastContainer, useToast } from "@/components/ui/toast-notification"
-import type { WasteLog, Branch } from "@/lib/types"
-// Removed: import { api, ApiClientError } from "@/lib/api-client";
-import { FormField } from "@/components/ui/form-field"
+import type React from "react";
+import { useAuth } from '@/components/auth-provider';
+import DeleteConfirmationModal from "@/components/ui/delete-confirmation-modal";
+import { ToastContainer, useToast } from "@/components/ui/toast-notification";
+import { useWasteLogManagement, type WasteLogWithBranch, type SortFieldWaste, type SortOrderWaste } from '@/lib/hooks/useWasteLogManagement';
+import { formatReason, getReasonIcon, getStatusBadge } from '@/lib/utils/wasteUtils';
+// FormField might be unused now if forms are fully custom or handled by a different component library
+// import { FormField } from "@/components/ui/form-field";
+import {
 import {
   Plus,
   Trash2,
@@ -22,474 +21,78 @@ import {
   Clock,
   CheckCircle,
   XCircle,
-  AlertCircle,
-  FileText,
+  // AlertCircle, // Now in wasteUtils
+  // FileText, // No longer directly used in page, handled by getReasonIcon in wasteUtils
   Camera,
   MapPin,
   User,
-  TrendingUp,
-  TrendingDown,
-  BarChart3,
+  // TrendingUp, // Now in wasteUtils
+  // TrendingDown, // Now in wasteUtils
+  // BarChart3, // Likely specific to analytics or dashboard
   Filter,
   SortAsc,
   SortDesc,
   RefreshCw,
   Bell,
   X,
-  Settings,
+  // Settings, // Generic, might not be needed directly
   Info,
-  Zap,
-  Target,
+  // Zap, // Generic
+  // Target, // Generic
   Activity,
   ChevronDown,
   ExternalLink,
-  Upload,
-} from "lucide-react"
+  // Upload, // Generic
+} from "lucide-react";
 
-interface WasteLogWithBranch extends WasteLog {
-  branch: Branch
-}
-
-interface WasteLogReview {
-  id: string
-  action: "CREATE" | "UPDATE" | "DELETE"
-  status: "PENDING" | "APPROVED" | "REJECTED"
-  reason?: string
-  createdAt: string
-  creator: {
-    username: string
-    role: string
-  }
-  wasteLog?: {
-    itemName: string
-    branch: {
-      name: string
-    }
-  }
-}
 
 export default function WastePage() {
-  // Obtain user session and CSRF token from authentication context.
-  const { user, csrfToken } = useAuth();
-  const { toasts, addToast, removeToast } = useToast()
-  const [wasteLogs, setWasteLogs] = useState<WasteLogWithBranch[]>([])
-  const [branches, setBranches] = useState<Branch[]>([])
-  const [reviews, setReviews] = useState<WasteLogReview[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showForm, setShowForm] = useState(false)
-  const [editingLog, setEditingLog] = useState<WasteLogWithBranch | null>(null)
-  const [viewingLog, setViewingLog] = useState<WasteLogWithBranch | null>(null)
-  const [showReviews, setShowReviews] = useState(false)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [filterReason, setFilterReason] = useState("")
-  const [filterBranch, setFilterBranch] = useState("")
-  const [sortBy, setSortBy] = useState("createdAt")
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
-  const [showFilters, setShowFilters] = useState(false)
-  const [deleteModal, setDeleteModal] = useState<{
-    isOpen: boolean
-    wasteLog: WasteLogWithBranch | null
-    isLoading: boolean
-  }>({
-    isOpen: false,
-    wasteLog: null,
-    isLoading: false,
-  })
-  const [formData, setFormData] = useState({
-    itemName: "",
-    quantity: "",
-    unit: "kg",
-    value: "",
-    reason: "SPOILAGE",
-    branchId: "",
-    photo: "",
-    wasteDate: new Date().toISOString().split("T")[0],
-  })
+  const { user } = useAuth(); // user might be needed for role-specific UI elements
+  const { toasts, removeToast } = useToast(); // Keep toast context if used directly in JSX, or move if fully in hook
 
-  useEffect(() => {
-    fetchWasteLogs(false) // Don't show toast on initial load
-    if (user?.role === "SUPER_ADMIN") {
-      fetchBranches()
-      fetchReviews()
-    }
-  }, [user])
+  const {
+    branches,
+    reviews,
+    loading,
+    showForm,
+    editingLog,
+    viewingLog,
+    showReviews,
+    searchTerm,
+    filterReason,
+    filterBranch,
+    sortBy,
+    sortOrder,
+    showFilters,
+    deleteModal,
+    formData,
+    filteredWasteLogs,
+    stats,
+    refreshAllData,
+    handleSubmit,
+    handleEdit,
+    handleDelete,
+    handleReviewAction,
+    resetForm,
+    openEditForm,
+    openDeleteModal,
+    setSearchTerm,
+    setFilterReason,
+    setFilterBranch,
+    setSortBy,
+    setSortOrder,
+    setShowForm,
+    setEditingLog,
+    setViewingLog,
+    setShowReviews,
+    setShowFilters,
+    setDeleteModal,
+    setFormData,
+  } = useWasteLogManagement();
 
-  const fetchWasteLogs = async (showToast = false) => {
-    try {
-      setLoading(true)
-      const response = await fetch("/api/waste-logs", {
-        cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache',
-        },
-      })
+  // Helper functions like formatReason, getReasonIcon, getStatusBadge are now imported from wasteUtils
 
-      if (response.ok) {
-        const data = await response.json()
-        // Ensure wasteLogs is always an array
-        const wasteLogsArray = Array.isArray(data.wasteLogs) ? data.wasteLogs : []
-        setWasteLogs(wasteLogsArray)
-
-        // Only show toast if explicitly requested (manual refresh)
-        if (showToast) {
-          addToast({
-            type: "success",
-            title: "Data Refreshed",
-            message: "Waste logs have been refreshed successfully.",
-          })
-        }
-      } else {
-        throw new Error('Failed to fetch waste logs')
-      }
-    } catch (error) {
-      console.error("Failed to fetch waste logs:", error)
-      // Set empty array on error to prevent reduce issues
-      setWasteLogs([])
-      addToast({
-        type: "error",
-        title: "Error",
-        message: "Failed to refresh waste logs. Please try again.",
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const fetchBranches = async () => {
-    try {
-      const response = await fetch("/api/branches")
-      if (response.ok) {
-        const data = await response.json()
-        setBranches(Array.isArray(data.branches) ? data.branches : [])
-      }
-    } catch (error) {
-      console.error("Failed to fetch branches:", error)
-      setBranches([])
-    }
-  }
-
-  const fetchReviews = async () => {
-    try {
-      const response = await fetch("/api/reviews?status=PENDING")
-      if (response.ok) {
-        const data = await response.json()
-        setReviews(Array.isArray(data.reviews) ? data.reviews : [])
-      }
-    } catch (error) {
-      console.error("Failed to fetch reviews:", error)
-      setReviews([])
-    }
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    try {
-      setLoading(true)
-
-      // API call with CSRF protection.
-      const response = await fetchWithCsrf('/api/waste-logs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      }, csrfToken);
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Failed to submit waste log and parse error details.' }));
-        // Attempt to replicate ApiClientError style error handling
-        if (errorData.details && Array.isArray(errorData.details)) {
-          addValidationErrors(errorData.details, "Please fix the following errors");
-        } else {
-          addToast({ type: "error", title: "Error", message: errorData.error || 'Failed to submit waste log.'});
-        }
-        throw new Error(errorData.error || 'Failed to submit waste log');
-      }
-
-      const result = await response.json();
-
-      if (result.requiresApproval) {
-        addToast({
-          type: "info",
-          title: "Submitted for Approval",
-          message: "Your waste log has been submitted and is awaiting super admin approval.",
-        })
-      } else {
-        addToast({
-          type: "success",
-          title: "Waste Log Created",
-          message: "Waste log has been successfully created.",
-        })
-      }
-
-      setShowForm(false)
-      resetForm()
-      fetchWasteLogs()
-
-    } catch (error) { // Error is already an Error instance or has been made one
-      // Avoid re-wrapping if it's already a known error structure from above
-      if (!(error instanceof Error && error.message.includes('Failed to submit waste log'))) {
-         addToast({
-           type: "error",
-           title: "Submission Error",
-           message: error instanceof Error ? error.message : "An unexpected error occurred. Please try again."
-         })
-      }
-      console.error("handleSubmit error:", error); // Keep console log for debugging
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleEdit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!editingLog) return
-
-    try {
-      // API call with CSRF protection.
-      const response = await fetchWithCsrf(`/api/waste-logs/${editingLog.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      }, csrfToken);
-
-      if (response.ok) {
-        const result = await response.json()
-        if (result.requiresApproval) {
-          addToast({
-            type: "info",
-            title: "Update Submitted",
-            message: "Your update request has been submitted for super admin approval.",
-          })
-        } else {
-          addToast({
-            type: "success",
-            title: "Waste Log Updated",
-            message: "Waste log has been successfully updated.",
-          })
-        }
-        setEditingLog(null)
-        resetForm()
-        fetchWasteLogs(false) // Don't show refresh toast, we already show update success
-        if (user?.role === "SUPER_ADMIN") {
-          fetchReviews()
-        }
-      }
-    } catch (error) {
-      console.error("Failed to update waste log:", error)
-      addToast({
-        type: "error",
-        title: "Error",
-        message: "Failed to update waste log. Please try again.",
-      })
-    }
-  }
-
-  const handleDelete = async (reason: string) => {
-    if (!deleteModal.wasteLog) return
-
-    setDeleteModal((prev) => ({ ...prev, isLoading: true }))
-
-    try {
-      // API call with CSRF protection.
-      const response = await fetchWithCsrf(`/api/waste-logs/${deleteModal.wasteLog.id}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason }),
-      }, csrfToken);
-
-      if (response.ok) {
-        const result = await response.json()
-        if (result.requiresApproval) {
-          addToast({
-            type: "info",
-            title: "Delete Request Submitted",
-            message: "Your delete request has been submitted for super admin approval.",
-          })
-        } else {
-          addToast({
-            type: "success",
-            title: "Waste Log Deleted",
-            message: "Waste log has been successfully deleted.",
-          })
-        }
-        setDeleteModal({ isOpen: false, wasteLog: null, isLoading: false })
-        fetchWasteLogs(false) // Don't show refresh toast, we already show delete success
-        if (user?.role === "SUPER_ADMIN") {
-          fetchReviews()
-        }
-      }
-    } catch (error) {
-      console.error("Failed to delete waste log:", error)
-      addToast({
-        type: "error",
-        title: "Error",
-        message: "Failed to delete waste log. Please try again.",
-      })
-      setDeleteModal((prev) => ({ ...prev, isLoading: false }))
-    }
-  }
-
-  const handleReviewAction = async (reviewId: string, action: "approve" | "reject") => {
-    const reviewNotes = prompt(`Please provide notes for ${action}ing this request:`)
-    if (!reviewNotes) return
-
-    try {
-      // API call with CSRF protection.
-      const response = await fetchWithCsrf(`/api/reviews/${reviewId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, reviewNotes }),
-      }, csrfToken);
-
-      if (response.ok) {
-        addToast({
-          type: "success",
-          title: `Request ${action === "approve" ? "Approved" : "Rejected"}`,
-          message: `The request has been successfully ${action}d.`,
-        })
-        fetchReviews()
-        fetchWasteLogs(false) // Don't show refresh toast, we already show review action success
-      }
-    } catch (error) {
-      console.error("Failed to process review:", error)
-      addToast({
-        type: "error",
-        title: "Error",
-        message: "Failed to process review. Please try again.",
-      })
-    }
-  }
-
-  const resetForm = () => {
-    setFormData({
-      itemName: "",
-      quantity: "",
-      unit: "kg",
-      value: "",
-      reason: "SPOILAGE",
-      branchId: "",
-      photo: "",
-      wasteDate: new Date().toISOString().split("T")[0],
-    })
-  }
-
-  const openEditForm = (wasteLog: WasteLogWithBranch) => {
-    setEditingLog(wasteLog)
-    setFormData({
-      itemName: wasteLog.itemName,
-      quantity: wasteLog.quantity.toString(),
-      unit: wasteLog.unit,
-      value: wasteLog.value.toString(),
-      reason: wasteLog.reason,
-      branchId: wasteLog.branchId,
-      photo: wasteLog.photo || "",
-      wasteDate: new Date(wasteLog.createdAt).toISOString().split("T")[0],
-    })
-    setShowForm(true)
-  }
-
-  const openDeleteModal = (wasteLog: WasteLogWithBranch) => {
-    setDeleteModal({
-      isOpen: true,
-      wasteLog,
-      isLoading: false,
-    })
-  }
-
-  const formatReason = (reason: string) => {
-    return reason
-      .replace("_", " ")
-      .toLowerCase()
-      .replace(/\b\w/g, (l) => l.toUpperCase())
-  }
-
-  const getReasonIcon = (reason: string) => {
-    switch (reason) {
-      case "SPOILAGE":
-        return <AlertCircle className="w-4 h-4 text-red-500" />
-      case "OVERPRODUCTION":
-        return <TrendingUp className="w-4 h-4 text-orange-500" />
-      case "PLATE_WASTE":
-        return <Trash2 className="w-4 h-4 text-yellow-500" />
-      case "BUFFET_LEFTOVER":
-        return <TrendingDown className="w-4 h-4 text-blue-500" />
-      default:
-        return <FileText className="w-4 h-4 text-gray-500" />
-    }
-  }
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "PENDING":
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
-            <Clock className="w-3 h-3" />
-            Pending
-          </span>
-        )
-      case "APPROVED":
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <CheckCircle className="w-3 h-3" />
-            Approved
-          </span>
-        )
-      case "REJECTED":
-        return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-200">
-            <XCircle className="w-3 h-3" />
-            Rejected
-          </span>
-        )
-      default:
-        return null
-    }
-  }
-
-  // Safe stats calculation with array checks
-  const stats = {
-    total: Array.isArray(wasteLogs) ? wasteLogs.length : 0,
-    totalWaste: Array.isArray(wasteLogs) ? wasteLogs.reduce((sum, log) => sum + (Number(log.quantity) || 0), 0) : 0,
-    totalValue: Array.isArray(wasteLogs) ? wasteLogs.reduce((sum, log) => sum + (Number(log.value) || 0), 0) : 0,
-    averageValue: (() => {
-      if (!Array.isArray(wasteLogs) || wasteLogs.length === 0) return 0;
-      const totalValue = wasteLogs.reduce((sum, log) => sum + (Number(log.value) || 0), 0);
-      return totalValue / wasteLogs.length;
-    })()
-  }
-
-  // Filter and sort waste logs safely
-  const filteredWasteLogs = Array.isArray(wasteLogs)
-    ? wasteLogs
-      .filter((log) => {
-        const matchesSearch = log.itemName.toLowerCase().includes(searchTerm.toLowerCase())
-        const matchesReason = !filterReason || log.reason === filterReason
-        const matchesBranch = !filterBranch || log.branchId === filterBranch
-        return matchesSearch && matchesReason && matchesBranch
-      })
-      .sort((a, b) => {
-        const aValue = a[sortBy as keyof WasteLogWithBranch]
-        const bValue = b[sortBy as keyof WasteLogWithBranch]
-
-        if (sortOrder === "asc") {
-          return aValue > bValue ? 1 : -1
-        } else {
-          return aValue < bValue ? 1 : -1
-        }
-      })
-    : []
-
-  const addValidationErrors = (details: any[], title: string) => {
-    details.forEach(detail => {
-      addToast({
-        type: "error",
-        title: title,
-        message: `${detail.field}: ${detail.message}`,
-      })
-    })
-  }
-
-  if (loading) {
+  if (loading && filteredWasteLogs.length === 0) { // Show full page loader only on initial load
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
         <div className="flex items-center justify-center h-96">
@@ -534,13 +137,7 @@ export default function WastePage() {
 
               <div className="mt-6 lg:mt-0 flex items-center space-x-3">
                 <button
-                  onClick={() => {
-                    fetchWasteLogs(true) // Show toast for manual refresh only
-                    if (user?.role === "SUPER_ADMIN") {
-                      fetchBranches()
-                      fetchReviews()
-                    }
-                  }}
+                  onClick={() => refreshAllData(true)}
                   disabled={loading}
                   className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 font-medium text-sm shadow-sm ${loading ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-md'
                     }`}
@@ -563,7 +160,11 @@ export default function WastePage() {
                 )}
 
                 <button
-                  onClick={() => setShowForm(true)}
+                  onClick={() => {
+                    setEditingLog(null);
+                    resetForm();
+                    setShowForm(true);
+                  }}
                   className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-kitchzero-primary to-kitchzero-secondary text-white hover:from-kitchzero-primary/90 hover:to-kitchzero-secondary/90 transition-all duration-200 font-semibold text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                 >
                   <Plus className="w-4 h-4" />
@@ -1006,7 +607,11 @@ export default function WastePage() {
               </p>
               {!searchTerm && !filterReason && !filterBranch && (
                 <button
-                  onClick={() => setShowForm(true)}
+                  onClick={() => {
+                    setEditingLog(null); // Clear editing state for new log
+                    resetForm(); // Reset form for new log
+                    setShowForm(true);
+                  }}
                   className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-kitchzero-primary to-kitchzero-secondary text-white rounded-xl hover:from-kitchzero-primary/90 hover:to-kitchzero-secondary/90 transition-all duration-200 font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                 >
                   <Plus className="w-5 h-5" />
@@ -1022,7 +627,8 @@ export default function WastePage() {
       <DeleteConfirmationModal
         isOpen={deleteModal.isOpen}
         onClose={() => setDeleteModal({ isOpen: false, wasteLog: null, isLoading: false })}
-        onConfirm={handleDelete}
+        onConfirm={user?.role !== "BRANCH_ADMIN" ? () => handleDelete("") : undefined} // Call with empty reason if not required
+        onConfirmWithReason={user?.role === "BRANCH_ADMIN" ? handleDelete : undefined} // Use this if reason is required
         title="Delete Waste Entry"
         description="Are you sure you want to delete this waste entry? This action cannot be undone."
         itemName={deleteModal.wasteLog?.itemName}
@@ -1440,14 +1046,27 @@ export default function WastePage() {
                           {review.status === "PENDING" && (
                             <div className="flex gap-3 ml-6">
                               <button
-                                onClick={() => handleReviewAction(review.id, "approve")}
+                                onClick={() => {
+                                  const notes = prompt(`Please provide notes for approving this request (optional):`);
+                                  if (notes !== null) { // User didn't cancel prompt
+                                    handleReviewAction(review.id, "approve", notes);
+                                  }
+                                }}
                                 className="group/btn flex items-center gap-2 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-semibold text-sm transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                               >
                                 <CheckCircle className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
                                 Approve
                               </button>
                               <button
-                                onClick={() => handleReviewAction(review.id, "reject")}
+                                onClick={() => {
+                                   const notes = prompt(`Please provide notes for rejecting this request:`);
+                                   if (notes) { // Notes are required for rejection
+                                     handleReviewAction(review.id, "reject", notes);
+                                   } else if (notes === "") {
+                                     // Handle case where user submits empty string but notes are required by some validation
+                                     alert("Rejection notes cannot be empty if required by policy."); // Or use a toast
+                                   }
+                                }}
                                 className="group/btn flex items-center gap-2 px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl font-semibold text-sm transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                               >
                                 <XCircle className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />

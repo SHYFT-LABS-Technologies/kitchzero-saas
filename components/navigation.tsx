@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react" // Added useCallback
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/components/auth-provider"
+import * as reviewService from "@/lib/services/reviewService"; // Import reviewService
 import {
   Menu,
   X,
@@ -27,15 +28,33 @@ export default function Navigation() {
   const userMenuRef = useRef<HTMLDivElement>(null)
   const userButtonRef = useRef<HTMLButtonElement>(null)
 
-  useEffect(() => {
-    // Only fetch pending reviews for super admins
-    if (user?.role === "SUPER_ADMIN") {
-      fetchPendingReviews()
-      // Poll every 30 seconds
-      const interval = setInterval(fetchPendingReviews, 30000)
-      return () => clearInterval(interval)
+  const fetchReviewsCount = useCallback(async () => {
+    if (user?.role !== "SUPER_ADMIN") {
+      setPendingReviews(0); // Reset if not super admin
+      return;
     }
-  }, [user])
+    try {
+      const response = await reviewService.fetchPendingReviews();
+      if (response.data) {
+        setPendingReviews(response.data.length); // Assuming response.data is the array of reviews
+      } else {
+        // Handle case where response.data is not available, though fetchFromApi should throw an error for non-ok responses
+        console.error("Failed to fetch pending reviews: No data in response", response.error);
+        setPendingReviews(0); // Or set to an error state / keep previous state
+      }
+    } catch (error) {
+      console.error("Failed to fetch pending reviews:", error);
+      setPendingReviews(0); // Or set to an error state / keep previous state
+    }
+  }, [user?.role]);
+
+  useEffect(() => {
+    if (user?.role === "SUPER_ADMIN") {
+      fetchReviewsCount();
+      const interval = setInterval(fetchReviewsCount, 30000); // Poll every 30 seconds
+      return () => clearInterval(interval);
+    }
+  }, [user?.role, fetchReviewsCount]);
 
   // Close mobile menu when route changes
   useEffect(() => {
@@ -58,18 +77,6 @@ export default function Navigation() {
     document.addEventListener("mousedown", handleClickOutside)
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [userMenuRef, userButtonRef])
-
-  const fetchPendingReviews = async () => {
-    try {
-      const response = await fetch("/api/reviews?status=PENDING")
-      if (response.ok) {
-        const data = await response.json()
-        setPendingReviews(data.reviews?.length || 0)
-      }
-    } catch (error) {
-      console.error("Failed to fetch pending reviews:", error)
-    }
-  }
 
   const toggleMenu = () => {
     setIsOpen(!isOpen)
