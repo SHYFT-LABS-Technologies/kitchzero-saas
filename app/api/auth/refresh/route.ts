@@ -10,6 +10,7 @@ import {
   checkRateLimitEnhanced,
   handleApiError
 } from "@/lib/api-utils"
+import { verifyCsrfToken } from "@/lib/security"; // Import CSRF verification
 
 export async function POST(request: NextRequest) {
   const requestId = logRequest(request)
@@ -26,6 +27,12 @@ export async function POST(request: NextRequest) {
   // 8. Both the new access token and the new refresh token are returned to the client via HttpOnly cookies.
   // This process ensures that each refresh token can only be used once, enhancing security.
   try {
+    if (!verifyCsrfToken(request)) {
+      // Log the CSRF failure for server-side observability
+      console.warn(`CSRF validation failed for request: ${request.method} ${request.url}`);
+      return createSecureErrorResponse('Invalid CSRF token', 403);
+    }
+
     // Rate limiting for refresh attempts
     await checkRateLimitEnhanced(request, null, 'refresh')
     

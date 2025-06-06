@@ -7,8 +7,10 @@ import {
   validateAndParseBody, 
   validateUrlParam,
   checkRateLimitEnhanced,
-  checkPermission 
+  checkPermission,
+  createSecureErrorResponse // Added for CSRF
 } from "@/lib/api-utils"
+import { verifyCsrfToken } from "@/lib/security"; // Import CSRF verification
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -76,6 +78,12 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     // Only super admins can approve/reject reviews
     if (!checkPermission(user.role, "SUPER_ADMIN")) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
+    if (!verifyCsrfToken(request)) {
+      // Log the CSRF failure for server-side observability
+      console.warn(`CSRF validation failed for request: ${request.method} ${request.url}`);
+      return createSecureErrorResponse('Invalid CSRF token', 403);
     }
 
     // Rate limiting

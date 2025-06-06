@@ -2,14 +2,22 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getAuthUser, invalidateSession } from "@/lib/auth"
 import { 
   createSecureSuccessResponse,
+  createSecureErrorResponse, // Added import
   logRequest,
   auditLog
 } from "@/lib/api-utils"
+import { verifyCsrfToken } from "@/lib/security"; // Import CSRF verification
 
 export async function POST(request: NextRequest) {
   const requestId = logRequest(request)
   
   try {
+    if (!verifyCsrfToken(request)) {
+      // Log the CSRF failure for server-side observability
+      console.warn(`CSRF validation failed for request: ${request.method} ${request.url}`);
+      return createSecureErrorResponse('Invalid CSRF token', 403);
+    }
+
     const user = await getAuthUser(request)
     
     if (user) {

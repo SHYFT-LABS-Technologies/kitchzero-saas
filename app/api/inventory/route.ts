@@ -2,7 +2,12 @@ import { type NextRequest, NextResponse } from "next/server"
 import { getAuthUser } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { inventorySchema } from "@/lib/validation"
-import { handleApiError, checkRateLimitEnhanced } from "@/lib/api-utils"
+import {
+  handleApiError,
+  checkRateLimitEnhanced,
+  createSecureErrorResponse // Added for CSRF
+} from "@/lib/api-utils"
+import { verifyCsrfToken } from "@/lib/security"; // Import CSRF verification
 
 export async function GET(request: NextRequest) {
   try {
@@ -36,6 +41,12 @@ export async function POST(request: NextRequest) {
     const user = await getAuthUser(request)
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    if (!verifyCsrfToken(request)) {
+      // Log the CSRF failure for server-side observability
+      console.warn(`CSRF validation failed for request: ${request.method} ${request.url}`);
+      return createSecureErrorResponse('Invalid CSRF token', 403);
     }
 
     await checkRateLimitEnhanced(request, user, 'api_write');

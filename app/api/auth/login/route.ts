@@ -11,12 +11,19 @@ import {
   auditLog,
   getClientIP
 } from "@/lib/api-utils"
+import { verifyCsrfToken } from "@/lib/security"; // Import CSRF verification
 
 export async function POST(request: NextRequest) {
   const requestId = logRequest(request)
   const clientIp = getClientIP(request)
   
   try {
+    if (!verifyCsrfToken(request)) {
+      // Log the CSRF failure for server-side observability
+      console.warn(`CSRF validation failed for request: ${request.method} ${request.url}`);
+      return createSecureErrorResponse('Invalid CSRF token', 403);
+    }
+
     // PostgreSQL-based rate limiting for login attempts
     await checkRateLimitEnhanced(request, null, 'login')
     

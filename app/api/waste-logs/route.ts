@@ -6,11 +6,13 @@ import {
   handleApiError, 
   checkRateLimitEnhanced,
   createSecureSuccessResponse,
+  createSecureErrorResponse, // Added for CSRF
   logRequest,
   auditLog,
   checkPermissions
 } from "@/lib/api-utils"
 import { RESOURCES, ACTIONS } from "@/lib/permissions"
+import { verifyCsrfToken } from "@/lib/security"; // Import CSRF verification
 
 export async function GET(request: NextRequest) {
   const requestId = logRequest(request)
@@ -57,6 +59,12 @@ export async function POST(request: NextRequest) {
     const user = await getAuthUser(request)
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    if (!verifyCsrfToken(request)) {
+      // Log the CSRF failure for server-side observability
+      console.warn(`CSRF validation failed for request: ${request.method} ${request.url}`);
+      return createSecureErrorResponse('Invalid CSRF token', 403);
     }
 
     // Rate limiting
