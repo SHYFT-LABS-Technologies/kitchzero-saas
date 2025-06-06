@@ -3,8 +3,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { useToast } from "@/components/ui/toast-notification";
+import { useBranchStore } from '@/lib/stores/branchStore'; // Import branch store
 import * as inventoryService from '@/lib/services/inventoryService';
-import * as branchService from '@/lib/services/branchService'; // Assuming branchService is created
+// Remove direct import of branchService if all branch fetching is via store for this hook
+// import * as branchService from '@/lib/services/branchService';
 import type { InventoryItem, Branch, InventoryData, ApiResponse, PaginatedApiResponse } from '@/lib/types';
 import { isExpired, isExpiringSoon } from '@/lib/utils/inventoryUtils';
 
@@ -76,9 +78,14 @@ export function useInventoryManagement(): UseInventoryManagementReturn {
   const { user, csrfToken } = useAuth();
   const { addToast } = useToast();
 
+  const globalBranches = useBranchStore(state => state.branches);
+  const fetchGlobalBranches = useBranchStore(state => state.fetchAllBranches);
+  const branchStoreLoading = useBranchStore(state => state.loading);
+  const branchStoreError = useBranchStore(state => state.error);
+
   const [inventory, setInventory] = useState<InventoryItemWithBranch[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
-  const [loading, setLoading] = useState(true);
+  // const [branches, setBranches] = useState<Branch[]>([]); // Replaced by globalBranches
+  const [loading, setLoading] = useState(true); // This can be for inventory loading primarily
   const [showForm, setShowForm] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItemWithBranch | null>(null);
   const [viewingItem, setViewingItem] = useState<InventoryItemWithBranch | null>(null);
@@ -128,41 +135,39 @@ export function useInventoryManagement(): UseInventoryManagementReturn {
     }
   }, [addToast]);
 
-  const fetchBranchesList = useCallback(async () => {
-    if (user?.role !== "SUPER_ADMIN") return;
-    try {
-      const response = await branchService.fetchBranches();
-      if (response.data) {
-        setBranches(response.data);
-      } else {
-        addToast({ type: "error", title: "Error", message: response.error || "Failed to fetch branches." });
-      }
-    } catch (error) {
-      console.error("Failed to fetch branches:", error);
-      addToast({ type: "error", title: "Error", message: "Failed to fetch branches. Please try again." });
+  // Use global branch store for fetching branches
+  const loadBranches = useCallback(async (forceRefresh = false) => {
+    if (user?.role === "SUPER_ADMIN") {
+      // Fetch all branches only if super admin.
+      // The store's fetchAllBranches handles its own error/loading states.
+      await fetchGlobalBranches(forceRefresh);
     }
-  }, [user?.role, addToast]);
+    // For BRANCH_ADMIN, their specific branch info is part of `user` object,
+    // and they don't need the list of all branches for inventory management within their own branch.
+    // If they did (e.g. a read-only list), this logic might change.
+  }, [user?.role, fetchGlobalBranches]);
 
   useEffect(() => {
     fetchInventoryItems();
-    fetchBranchesList();
-  }, [fetchInventoryItems, fetchBranchesList]);
+    loadBranches(); // Load branches on initial mount
+  }, [fetchInventoryItems, loadBranches]); // loadBranches is memoized
 
-  // Reset branchId if user is not super_admin or if branches are loading
    useEffect(() => {
     if (user?.role === 'BRANCH_ADMIN' && user.branchId) {
       setFormData(prev => ({ ...prev, branchId: user.branchId! }));
     } else if (user?.role !== 'SUPER_ADMIN') {
        setFormData(prev => ({ ...prev, branchId: "" }));
     }
-  }, [user, branches]);
+    // This effect might run before globalBranches are loaded if user is SUPER_ADMIN.
+    // The form's branch dropdown will populate once globalBranches are available.
+  }, [user, globalBranches]); // Depend on globalBranches to re-evaluate if needed
 
 
   const refreshData = useCallback(async () => {
     try {
-      setLoading(true);
+      setLoading(true); // For inventory items
       await fetchInventoryItems();
-      await fetchBranchesList();
+      await loadBranches(true); // Force refresh for branches from store
       addToast({
         type: "success",
         title: "Data Refreshed",
@@ -362,8 +367,8 @@ export function useInventoryManagement(): UseInventoryManagementReturn {
 
   return {
     inventory,
-    branches,
-    loading,
+    branches: globalBranches, // Use branches from Zustand store
+    loading: loading || branchStoreLoading, // Combine loading states
     showForm,
     editingItem,
     viewingItem,

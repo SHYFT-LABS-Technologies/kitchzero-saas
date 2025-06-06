@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/components/auth-provider';
-import { useToast } from "@/components/ui/toast-notification"; // Assuming useToast is a custom hook
+import { useToast } from "@/components/ui/toast-notification";
+import { useBranchStore } from '@/lib/stores/branchStore'; // Import branch store
 import * as branchService from '@/lib/services/branchService';
 import * as userService from '@/lib/services/userService';
-import type { Branch, User, BranchData, UserCreationData, UserUpdateData, ApiResponse, PaginatedApiResponse } from '@/lib/types';
+import type { Branch, User, BranchData, UserCreationData, UserUpdateData } from '@/lib/types';
 
 export interface BranchWithStats extends Branch {
   users: User[]; // Users directly associated with this branch
@@ -16,9 +17,11 @@ export interface BranchWithStats extends Branch {
 }
 
 export interface UseBranchManagementReturn {
-  branches: BranchWithStats[];
-  allUsers: User[]; // All users, for assigning to branches if needed, or general view
-  loading: boolean;
+  branches: BranchWithStats[]; // Detailed branches for the main page display
+  branchListForUserForm: Branch[]; // Simple list for dropdowns, from global store
+  allUsers: User[];
+  loading: boolean; // Overall loading for the hook's primary data
+  branchListLoading: boolean; // Loading state for the global branch list
   showBranchForm: boolean;
   showUserForm: boolean;
   editingBranch: BranchWithStats | null;
@@ -46,9 +49,16 @@ export function useBranchManagement(): UseBranchManagementReturn {
   const { user: authUser, csrfToken } = useAuth();
   const { addToast } = useToast();
 
+  // For the main display of branches with stats
   const [branches, setBranches] = useState<BranchWithStats[]>([]);
+  // For the user assignment dropdown (simpler list)
+  const globalBranchListForUserForm = useBranchStore(state => state.branches);
+  const fetchGlobalBranchList = useBranchStore(state => state.fetchAllBranches);
+  const branchListLoading = useBranchStore(state => state.loading);
+  // const branchListError = useBranchStore(state => state.error); // Optional: handle errors for this specific fetch
+
   const [allUsers, setAllUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // For main branches & users data
   const [showBranchForm, setShowBranchForm] = useState(false);
   const [showUserForm, setShowUserForm] = useState(false);
   const [editingBranch, setEditingBranch] = useState<BranchWithStats | null>(null);
@@ -248,13 +258,19 @@ export function useBranchManagement(): UseBranchManagementReturn {
     setShowBranchForm(true);
   };
 
-  const openNewUserForm = (branchId?: string) => {
+  const openNewUserForm = useCallback((branchId?: string) => {
+    if (authUser?.role === 'SUPER_ADMIN') {
+      fetchGlobalBranchList(); // Ensure branch list is available for SUPER_ADMIN
+    }
     setEditingUser(null);
     setUserFormData({ ...initialUserFormData, branchId: branchId || "" });
     setShowUserForm(true);
-  };
+  }, [authUser?.role, fetchGlobalBranchList, initialUserFormData]);
 
-  const openEditUserForm = (userToEdit: User) => {
+  const openEditUserForm = useCallback((userToEdit: User) => {
+    if (authUser?.role === 'SUPER_ADMIN') {
+      fetchGlobalBranchList(); // Ensure branch list is available
+    }
     setEditingUser(userToEdit);
     setUserFormData({
       username: userToEdit.username,
@@ -267,9 +283,14 @@ export function useBranchManagement(): UseBranchManagementReturn {
   };
 
   return {
-    branches, allUsers, loading, showBranchForm, showUserForm, editingBranch, editingUser,
+    branches,
+    branchListForUserForm: globalBranchListForUserForm,
+    allUsers,
+    loading,
+    branchListLoading,
+    showBranchForm, showUserForm, editingBranch, editingUser,
     branchFormData, userFormData, fetchBranchesAndUsers, handleBranchSubmit, handleUserSubmit,
-    handleDeleteBranch, handleDeleteUser, openEditBranchForm, openNewBranchForm, openEditUserForm, openNewUserForm,
+    handleDeleteBranch, handleDeleteUser, openEditBranchForm, openNewBranchForm, openEditUserForm,
     setShowBranchForm, setShowUserForm, setBranchFormData, setUserFormData, setEditingBranch, setEditingUser,
   };
 }

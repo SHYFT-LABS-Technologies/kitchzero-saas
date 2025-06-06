@@ -3,10 +3,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/components/auth-provider';
 import { useToast } from "@/components/ui/toast-notification";
+import { useBranchStore } from '@/lib/stores/branchStore'; // Import branch store
 import * as wasteLogService from '@/lib/services/wasteLogService';
-import * as branchService from '@/lib/services/branchService';
+// import * as branchService from '@/lib/services/branchService'; // Replaced by store
 import * as reviewService from '@/lib/services/reviewService';
-import type { WasteLog, Branch, Review as WasteLogReviewType, WasteLogData, DeletionReason } from '@/lib/types'; // Renamed Review to WasteLogReviewType
+import type { WasteLog, Branch, Review as WasteLogReviewType, WasteLogData, DeletionReason } from '@/lib/types';
 
 export interface WasteLogWithBranch extends WasteLog {
   branch: Branch; // Ensure branch is always populated
@@ -83,10 +84,15 @@ export function useWasteLogManagement(): UseWasteLogManagementReturn {
   const { user, csrfToken } = useAuth();
   const { addToast } = useToast();
 
+  const globalBranches = useBranchStore(state => state.branches);
+  const fetchGlobalBranches = useBranchStore(state => state.fetchAllBranches);
+  const branchStoreLoading = useBranchStore(state => state.loading);
+  // const branchStoreError = useBranchStore(state => state.error); // Can be used for more specific error handling if needed
+
   const [wasteLogs, setWasteLogs] = useState<WasteLogWithBranch[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
+  // const [branches, setBranches] = useState<Branch[]>([]); // Replaced by globalBranches
   const [reviews, setReviews] = useState<WasteLogReviewType[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // For waste logs and reviews primarily
   const [showForm, setShowForm] = useState(false);
   const [editingLog, setEditingLog] = useState<WasteLogWithBranch | null>(null);
   const [viewingLog, setViewingLog] = useState<WasteLogWithBranch | null>(null);
@@ -143,22 +149,13 @@ export function useWasteLogManagement(): UseWasteLogManagementReturn {
     }
   }, [addToast]);
 
-  const fetchBranchesInternal = useCallback(async () => {
-    if (user?.role !== "SUPER_ADMIN") return;
-    try {
-      const response = await branchService.fetchBranches();
-      if (response.data) {
-        setBranches(response.data);
-      } else {
-        addToast({ type: "error", title: "Error", message: response.error || "Failed to fetch branches." });
-        setBranches([]);
-      }
-    } catch (error) {
-      console.error("Failed to fetch branches:", error);
-      addToast({ type: "error", title: "Error", message: "An unexpected error occurred while fetching branches." });
-      setBranches([]);
+  // Use global branch store for fetching branches
+  const loadGlobalBranches = useCallback(async (forceRefresh = false) => {
+    if (user?.role === "SUPER_ADMIN") {
+      await fetchGlobalBranches(forceRefresh);
     }
-  }, [user?.role, addToast]);
+    // Non-SUPER_ADMINs don't need the full list for their own waste log management usually.
+  }, [user?.role, fetchGlobalBranches]);
 
   const fetchReviewsInternal = useCallback(async () => {
     if (user?.role !== "SUPER_ADMIN") return;
@@ -178,10 +175,10 @@ export function useWasteLogManagement(): UseWasteLogManagementReturn {
   }, [user?.role, addToast]);
 
   const refreshAllData = useCallback(async (showRefreshToast = true) => {
-    setLoading(true);
+    setLoading(true); // Combined loading state, or manage separately
     await fetchWasteLogsInternal();
     if (user?.role === "SUPER_ADMIN") {
-      await fetchBranchesInternal();
+      await loadGlobalBranches(true); // Force refresh for branches
       await fetchReviewsInternal();
     }
     if (showRefreshToast) {
@@ -368,7 +365,7 @@ export function useWasteLogManagement(): UseWasteLogManagementReturn {
   };
 
   return {
-    wasteLogs, branches, reviews, loading, showForm, editingLog, viewingLog, showReviews,
+    wasteLogs, branches: globalBranches, reviews, loading: loading || branchStoreLoading, showForm, editingLog, viewingLog, showReviews,
     searchTerm, filterReason, filterBranch, sortBy, sortOrder, showFilters, deleteModal, formData,
     filteredWasteLogs, stats, refreshAllData, handleSubmit, handleEdit, handleDelete, handleReviewAction,
     resetForm, openEditForm, openDeleteModal, setSearchTerm, setFilterReason, setFilterBranch,

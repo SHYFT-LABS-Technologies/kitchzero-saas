@@ -33,6 +33,8 @@ export default function BranchesPage() {
     branches,
     allUsers, // Renamed from 'users' in the hook for clarity
     loading,
+    branchListForUserForm, // Use this for the dropdown
+    branchListLoading, // Loading state for the branch list dropdown
     showBranchForm,
     showUserForm,
     editingBranch,
@@ -394,9 +396,10 @@ export default function BranchesPage() {
                       }}
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200 text-sm"
                       required={userFormData.role === "BRANCH_ADMIN"}
+                      disabled={branchListLoading}
                     >
-                      <option value="">Select Branch</option>
-                      {branches.map((branch) => ( // branches from hook
+                      <option value="">{branchListLoading ? "Loading branches..." : "Select Branch"}</option>
+                      {branchListForUserForm.map((branch) => ( // Use branchListForUserForm from hook
                         <option key={branch.id} value={branch.id}>
                           {branch.name} - {branch.location}
                         </option>
@@ -606,7 +609,7 @@ export default function BranchesPage() {
             </div>
           </div>
 
-          {users.length > 0 ? (
+          {allUsers.length > 0 ? ( // Check allUsers from hook
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
