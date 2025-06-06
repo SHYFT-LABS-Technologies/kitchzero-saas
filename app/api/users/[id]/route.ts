@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { getAuthUser, hashPassword } from "@/lib/auth"
+import { getAuthUser, hashPassword, invalidateAllUserSessions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { updateUserSchema } from "@/lib/validation"
 import { 
@@ -172,6 +172,16 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
         updatedAt: true,
       },
     })
+
+    // If password was changed, invalidate all sessions for this user.
+    // This is a security measure to ensure that if an admin changes a user's password
+    // (e.g., due to a suspected compromise or user request), all existing sessions for that user
+    // are terminated. This forces the user to re-authenticate with their new password on all
+    // devices/browsers, preventing unauthorized access via old sessions.
+    if (updateData.password) {
+      await invalidateAllUserSessions(userId);
+      console.log(`All sessions for user ${userId} invalidated due to password change by admin ${user.id}.`);
+    }
 
     return NextResponse.json({ 
       user: updatedUser,
