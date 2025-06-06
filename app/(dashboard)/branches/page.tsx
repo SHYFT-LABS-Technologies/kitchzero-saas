@@ -1,10 +1,12 @@
-"use client"
+"use client";
 
-import type React from "react"
-import { useEffect, useState } from "react"
-import { useAuth } from '@/components/auth-provider'; // Standard import
-import { fetchWithCsrf } from '@/lib/api-client'; // Added import
-import type { Branch, User } from "@/lib/types"
+import type React from "react";
+import { useAuth } from '@/components/auth-provider';
+// No specific branchUtils created yet, direct UI helpers can remain or be inline
+import { useBranchManagement, type BranchWithStats } from '@/lib/hooks/useBranchManagement';
+// Ensure User type is imported if used directly, or rely on types from hook
+import type { User } from "@/lib/types";
+import {
 import {
   Plus,
   Building2,
@@ -19,310 +21,42 @@ import {
   Shield,
   BarChart3,
   Clock,
-} from "lucide-react"
+} from "lucide-react";
 
-interface BranchWithStats extends Branch {
-  users: User[]
-  _count: {
-    inventory: number
-    wasteLogs: number
-  }
-}
+// BranchWithStats is now imported from the hook
+// User type is imported from lib/types
 
 export default function BranchesPage() {
-  // Obtain user session and CSRF token from authentication context.
-  const { user, csrfToken } = useAuth();
-  const [branches, setBranches] = useState<BranchWithStats[]>([])
-  const [users, setUsers] = useState<User[]>([])
-  const [loading, setLoading] = useState(true)
-  const [showBranchForm, setShowBranchForm] = useState(false)
-  const [showUserForm, setShowUserForm] = useState(false)
-  const [editingBranch, setEditingBranch] = useState<BranchWithStats | null>(null)
-  const [editingUser, setEditingUser] = useState<User | null>(null)
-  const [branchFormData, setBranchFormData] = useState({
-    name: "",
-    location: "",
-  })
-  const [userFormData, setUserFormData] = useState({
-    username: "",
-    password: "",
-    role: "BRANCH_ADMIN" as "SUPER_ADMIN" | "BRANCH_ADMIN",
-    branchId: "",
-  })
+  const { user } = useAuth(); // Auth user for role checks etc.
+  // All state and handlers are now from the hook
+  const {
+    branches,
+    allUsers, // Renamed from 'users' in the hook for clarity
+    loading,
+    showBranchForm,
+    showUserForm,
+    editingBranch,
+    editingUser,
+    branchFormData,
+    userFormData,
+    // fetchBranchesAndUsers, // This is called by the hook internally or via a refresh function
+    handleBranchSubmit,
+    handleUserSubmit,
+    handleDeleteBranch,
+    handleDeleteUser,
+    openEditBranchForm,
+    openNewBranchForm, // Added this for clarity
+    openEditUserForm,
+    openNewUserForm,
+    setShowBranchForm,
+    setShowUserForm,
+    setBranchFormData,
+    setUserFormData,
+    setEditingBranch, // If needed for direct manipulation, though usually through open/close form fns
+    setEditingUser,  // Same as above
+  } = useBranchManagement();
 
-  useEffect(() => {
-    if (user?.role === "SUPER_ADMIN") {
-      fetchBranches()
-      fetchUsers()
-    }
-  }, [user])
-
-  const fetchBranches = async () => {
-    try {
-      const response = await fetch("/api/branches")
-      if (response.ok) {
-        const data = await response.json()
-        setBranches(data.branches)
-      }
-    } catch (error) {
-      console.error("Failed to fetch branches:", error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const fetchUsers = async () => {
-    try {
-      const response = await fetch("/api/users")
-      if (response.ok) {
-        const data = await response.json()
-        setUsers(data.users)
-      }
-    } catch (error) {
-      console.error("Failed to fetch users:", error)
-    }
-  }
-
-  const handleBranchSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    try {
-      const url = editingBranch ? `/api/branches/${editingBranch.id}` : "/api/branches"
-      const method = editingBranch ? "PUT" : "POST"
-
-      // Validate form data before sending
-      if (!branchFormData.name.trim()) {
-        alert("Branch name is required")
-        return
-      }
-      if (!branchFormData.location.trim()) {
-        alert("Location is required")
-        return
-      }
-
-      // API call with CSRF protection.
-      const response = await fetchWithCsrf(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: branchFormData.name.trim(),
-          location: branchFormData.location.trim()
-        }),
-      }, csrfToken);
-
-      const result = await response.json()
-
-      if (response.ok) {
-        setShowBranchForm(false)
-        setEditingBranch(null)
-        setBranchFormData({ name: "", location: "" })
-        fetchBranches()
-        // Show success message if available
-        if (result.message) {
-          alert(result.message)
-        }
-      } else {
-        // Handle validation errors
-        if (result.details && Array.isArray(result.details)) {
-          const errorMessages = result.details.map((detail: any) =>
-            `${detail.field}: ${detail.message}`
-          ).join('\n')
-          alert(`Validation errors:\n${errorMessages}`)
-        } else {
-          alert(result.error || "Failed to save branch")
-        }
-      }
-    } catch (error) {
-      console.error("Failed to save branch:", error)
-      alert("Failed to save branch. Please check your connection and try again.")
-    }
-  }
-
-  const handleUserSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    try {
-      // Client-side validation
-      if (!userFormData.username.trim()) {
-        alert("Username is required")
-        return
-      }
-
-      if (userFormData.username.trim().length < 3) {
-        alert("Username must be at least 3 characters long")
-        return
-      }
-
-      if (!editingUser && !userFormData.password.trim()) {
-        alert("Password is required")
-        return
-      }
-
-      if (!editingUser && userFormData.password.length < 6) {
-        alert("Password must be at least 6 characters long")
-        return
-      }
-
-      if (!userFormData.role) {
-        alert("Role is required")
-        return
-      }
-
-      if (userFormData.role === "BRANCH_ADMIN" && !userFormData.branchId) {
-        alert("Branch selection is required for Branch Admin role")
-        return
-      }
-
-      const url = editingUser ? `/api/users/${editingUser.id}` : "/api/users"
-      const method = editingUser ? "PUT" : "POST"
-
-      // Prepare clean data
-      const submitData: any = {
-        username: userFormData.username.trim(),
-        role: userFormData.role,
-      }
-
-      // Only include password if it's provided
-      if (userFormData.password.trim()) {
-        submitData.password = userFormData.password
-      }
-
-      // Only include branchId for BRANCH_ADMIN role
-      if (userFormData.role === "BRANCH_ADMIN") {
-        submitData.branchId = userFormData.branchId
-      }
-
-      console.log("Submitting user data:", submitData)
-
-      // API call with CSRF protection.
-      const response = await fetchWithCsrf(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(submitData),
-      }, csrfToken);
-
-      const result = await response.json()
-      console.log("User submission result:", result)
-
-      if (response.ok) {
-        setShowUserForm(false)
-        setEditingUser(null)
-        setUserFormData({ username: "", password: "", role: "BRANCH_ADMIN", branchId: "" })
-        fetchUsers()
-        fetchBranches()
-
-        if (result.message) {
-          alert(result.message)
-        }
-      } else {
-        // Handle validation errors
-        if (result.details && Array.isArray(result.details)) {
-          const errorMessages = result.details.map((detail: any) =>
-            `${detail.field}: ${detail.message}`
-          ).join('\n')
-          alert(`Validation errors:\n${errorMessages}`)
-        } else {
-          alert(result.error || "Failed to save user")
-        }
-      }
-    } catch (error) {
-      console.error("Failed to save user:", error)
-      alert("Failed to save user. Please check your connection and try again.")
-    }
-  }
-
-  const handleDeleteBranch = async (branchId: string) => {
-    if (!confirm("Are you sure you want to delete this branch? This will also delete all associated inventory and waste logs.")) return
-
-    try {
-      // API call with CSRF protection.
-      const response = await fetchWithCsrf(`/api/branches/${branchId}`, {
-        method: "DELETE",
-      }, csrfToken);
-
-      const result = await response.json()
-
-      if (response.ok) {
-        fetchBranches()
-        if (result.warning) {
-          alert(`${result.message}\n\nWarning: ${result.warning}`)
-        } else if (result.message) {
-          alert(result.message)
-        }
-      } else {
-        if (result.dependencies) {
-          const deps = result.dependencies
-          alert(`${result.error}\n\nDependencies:\n- Users: ${deps.users}\n- Inventory: ${deps.inventory}\n- Waste Logs: ${deps.wasteLogs}`)
-        } else {
-          alert(result.error || "Failed to delete branch")
-        }
-      }
-    } catch (error) {
-      console.error("Failed to delete branch:", error)
-      alert("Failed to delete branch. Please check your connection and try again.")
-    }
-  }
-
-  const handleDeleteUser = async (userId: string) => {
-    if (!confirm("Are you sure you want to delete this user?")) return
-
-    try {
-      // API call with CSRF protection.
-      const response = await fetchWithCsrf(`/api/users/${userId}`, {
-        method: "DELETE",
-      }, csrfToken);
-
-      const result = await response.json()
-
-      if (response.ok) {
-        fetchUsers()
-        fetchBranches()
-        if (result.message) {
-          alert(result.message)
-        }
-      } else {
-        alert(result.error || "Failed to delete user")
-      }
-    } catch (error) {
-      console.error("Failed to delete user:", error)
-      alert("Failed to delete user. Please check your connection and try again.")
-    }
-  }
-
-  const openEditBranch = (branch: BranchWithStats) => {
-    setEditingBranch(branch)
-    setBranchFormData({
-      name: branch.name,
-      location: branch.location,
-    })
-    setShowBranchForm(true)
-  }
-
-  const openEditUser = (user: User) => {
-    // Make sure branches are loaded
-    if (user?.role === "SUPER_ADMIN" && branches.length === 0) {
-      fetchBranches();
-    }
-
-    setEditingUser(user)
-    setUserFormData({
-      username: user.username,
-      password: "",
-      role: user.role,
-      branchId: user.branchId || "",
-    })
-    setShowUserForm(true)
-  }
-
-  const openNewUserForm = () => {
-    // Make sure branches are loaded
-    if (user?.role === "SUPER_ADMIN" && branches.length === 0) {
-      fetchBranches();
-    }
-
-    setEditingUser(null)
-    setUserFormData({ username: "", password: "", role: "BRANCH_ADMIN", branchId: "" })
-    setShowUserForm(true)
-  }
+  // UI Helper for displaying user counts or other derived stats could go here or in branchUtils.ts if complex
 
   if (user?.role !== "SUPER_ADMIN") {
     return (
@@ -385,14 +119,14 @@ export default function BranchesPage() {
 
               <div className="mt-6 lg:mt-0 flex items-center space-x-3">
                 <button
-                  onClick={openNewUserForm} // Use the new function
+                  onClick={openNewUserForm}
                   className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all duration-200 font-medium text-sm shadow-sm hover:shadow-md"
                 >
                   <UserPlus className="w-4 h-4" />
                   Add User
                 </button>
                 <button
-                  onClick={() => setShowBranchForm(true)}
+                  onClick={openNewBranchForm} // Use the specific function from hook
                   className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-kitchzero-primary to-kitchzero-secondary text-white hover:from-kitchzero-primary/90 hover:to-kitchzero-secondary/90 transition-all duration-200 font-semibold text-sm shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                 >
                   <Plus className="w-4 h-4" />
@@ -414,7 +148,7 @@ export default function BranchesPage() {
                   <Building2 className="w-6 h-6 text-white" />
                 </div>
                 <div className="text-right">
-                  <div className="text-2xl font-bold text-slate-900">{branches.length}</div>
+                  <div className="text-2xl font-bold text-slate-900">{branches.length}</div> {/* branches from hook */}
                   <div className="text-xs text-slate-500 font-medium">BRANCHES</div>
                 </div>
               </div>
@@ -435,7 +169,7 @@ export default function BranchesPage() {
                   <Users className="w-6 h-6 text-white" />
                 </div>
                 <div className="text-right">
-                  <div className="text-2xl font-bold text-slate-900">{users.length}</div>
+                  <div className="text-2xl font-bold text-slate-900">{allUsers.length}</div> {/* allUsers from hook */}
                   <div className="text-xs text-slate-500 font-medium">USERS</div>
                 </div>
               </div>
@@ -502,9 +236,9 @@ export default function BranchesPage() {
               <div className="relative bg-gradient-to-r from-slate-800 to-slate-900 p-6 text-white">
                 <button
                   onClick={() => {
-                    setShowBranchForm(false)
-                    setEditingBranch(null)
-                    setBranchFormData({ name: "", location: "" })
+                    setShowBranchForm(false);
+                    // setEditingBranch(null); // Handled by hook's open/close form functions
+                    // setBranchFormData({ name: "", location: "" }); // Handled by hook's reset
                   }}
                   className="absolute top-4 right-4 p-2 hover:bg-white/20 rounded-xl transition-colors"
                 >
@@ -550,9 +284,9 @@ export default function BranchesPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      setShowBranchForm(false)
-                      setEditingBranch(null)
-                      setBranchFormData({ name: "", location: "" })
+                      setShowBranchForm(false);
+                      // setEditingBranch(null);
+                      // setBranchFormData({ name: "", location: "" });
                     }}
                     className="px-6 py-3 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors font-medium text-slate-700"
                   >
@@ -578,9 +312,9 @@ export default function BranchesPage() {
               <div className="relative bg-gradient-to-r from-slate-800 to-slate-900 p-6 text-white">
                 <button
                   onClick={() => {
-                    setShowUserForm(false)
-                    setEditingUser(null)
-                    setUserFormData({ username: "", password: "", role: "BRANCH_ADMIN", branchId: "" })
+                    setShowUserForm(false);
+                    // setEditingUser(null); // Handled by hook
+                    // setUserFormData({ username: "", password: "", role: "BRANCH_ADMIN", branchId: "" }); // Handled by hook
                   }}
                   className="absolute top-4 right-4 p-2 hover:bg-white/20 rounded-xl transition-colors"
                 >
@@ -613,17 +347,30 @@ export default function BranchesPage() {
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">
-                    Password {editingUser && "(leave blank to keep current)"}
+                    Password {editingUser ? "(leave blank to keep current)" : "*"}
                   </label>
                   <input
                     type="password"
-                    value={userFormData.password}
+                    value={userFormData.password || ''}
                     onChange={(e) => setUserFormData({ ...userFormData, password: e.target.value })}
                     className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200 text-sm"
                     placeholder="Enter password"
-                    required={!editingUser}
+                    required={!editingUser} // Only required for new users
                   />
                 </div>
+                 {!editingUser && (
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-2">Confirm Password *</label>
+                    <input
+                      type="password"
+                      value={userFormData.passwordConfirmation || ''}
+                      onChange={(e) => setUserFormData({ ...userFormData, passwordConfirmation: e.target.value })}
+                      className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200 text-sm"
+                      placeholder="Confirm password"
+                      required={!editingUser}
+                    />
+                  </div>
+                )}
                 <div>
                   <label className="block text-sm font-semibold text-slate-700 mb-2">Role *</label>
                   <select
@@ -641,16 +388,15 @@ export default function BranchesPage() {
                   <div>
                     <label className="block text-sm font-semibold text-slate-700 mb-2">Assign to Branch *</label>
                     <select
-                      value={userFormData.branchId}
+                      value={userFormData.branchId || ""}
                       onChange={(e) => {
-                        console.log("Branch selected:", e.target.value); // Debug log
                         setUserFormData({ ...userFormData, branchId: e.target.value })
                       }}
                       className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-kitchzero-primary/20 focus:border-kitchzero-primary transition-all duration-200 text-sm"
-                      required
+                      required={userFormData.role === "BRANCH_ADMIN"}
                     >
                       <option value="">Select Branch</option>
-                      {branches.map((branch) => (
+                      {branches.map((branch) => ( // branches from hook
                         <option key={branch.id} value={branch.id}>
                           {branch.name} - {branch.location}
                         </option>
@@ -662,9 +408,9 @@ export default function BranchesPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      setShowUserForm(false)
-                      setEditingUser(null)
-                      setUserFormData({ username: "", password: "", role: "BRANCH_ADMIN", branchId: "" })
+                      setShowUserForm(false);
+                      // setEditingUser(null);
+                      // setUserFormData({ username: "", password: "", role: "BRANCH_ADMIN", branchId: "" });
                     }}
                     className="px-6 py-3 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors font-medium text-slate-700"
                   >
@@ -720,14 +466,14 @@ export default function BranchesPage() {
                     </div>
                     <div className="flex space-x-1">
                       <button
-                        onClick={() => openEditBranch(branch)}
+                        onClick={() => openEditBranchForm(branch)}
                         className="p-2.5 text-slate-400 hover:text-kitchzero-primary hover:bg-kitchzero-primary/10 rounded-xl transition-all duration-200 group/btn"
                         title="Edit Branch"
                       >
                         <Edit className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
                       </button>
                       <button
-                        onClick={() => handleDeleteBranch(branch.id)}
+                        onClick={() => handleDeleteBranch(branch.id)} // handleDeleteBranch from hook
                         className="p-2.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 group/btn"
                         title="Delete Branch"
                       >
@@ -873,9 +619,9 @@ export default function BranchesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {users.map((userData) => (
+                  {allUsers.map((currentListedUser) => ( // Use allUsers from hook
                     <tr
-                      key={userData.id}
+                      key={currentListedUser.id}
                       className="group hover:bg-gradient-to-r hover:from-slate-50/50 hover:to-transparent transition-all duration-200"
                     >
                       <td className="py-5 px-6">
@@ -884,54 +630,54 @@ export default function BranchesPage() {
                             <Users className="w-5 h-5 text-slate-500 group-hover:text-kitchzero-primary transition-colors" />
                           </div>
                           <div>
-                            <div className="font-semibold text-slate-900 text-sm">{userData.username}</div>
+                            <div className="font-semibold text-slate-900 text-sm">{currentListedUser.username}</div>
                             <div className="text-xs text-slate-500">System User</div>
                           </div>
                         </div>
                       </td>
                       <td className="py-5 px-6">
                         <span
-                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border ${userData.role === "SUPER_ADMIN"
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border ${currentListedUser.role === "SUPER_ADMIN"
                             ? "bg-red-50 text-red-700 border-red-200"
                             : "bg-blue-50 text-blue-700 border-blue-200"
                             }`}
                         >
                           <Shield className="w-3 h-3" />
-                          {userData.role === "SUPER_ADMIN" ? "Super Admin" : "Branch Admin"}
+                          {currentListedUser.role === "SUPER_ADMIN" ? "Super Admin" : "Branch Admin"}
                         </span>
                       </td>
                       <td className="py-5 px-6">
                         <div className="text-sm font-medium text-slate-900">
-                          {userData.branch ? userData.branch.name : "No branch assigned"}
+                          {currentListedUser.branch ? currentListedUser.branch.name : "N/A"}
                         </div>
-                        {userData.branch && (
+                        {currentListedUser.branch && (
                           <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
                             <MapPin className="w-3 h-3" />
-                            {userData.branch.location}
+                            {currentListedUser.branch.location}
                           </div>
                         )}
                       </td>
                       <td className="py-5 px-6">
                         <div className="text-sm font-medium text-slate-900">
-                          {new Date(userData.createdAt).toLocaleDateString()}
+                          {new Date(currentListedUser.createdAt).toLocaleDateString()}
                         </div>
                         <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
                           <Clock className="w-3 h-3" />
-                          {new Date(userData.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          {new Date(currentListedUser.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                         </div>
                       </td>
                       <td className="py-5 px-6">
                         <div className="flex items-center justify-end gap-1">
                           <button
-                            onClick={() => openEditUser(userData)}
+                            onClick={() => openEditUserForm(currentListedUser)}
                             className="p-2.5 text-slate-400 hover:text-kitchzero-primary hover:bg-kitchzero-primary/5 rounded-xl transition-all duration-200 group/btn"
                             title="Edit User"
                           >
                             <Edit className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
                           </button>
-                          {userData.id !== user.id && (
+                          {currentListedUser.id !== user?.id && ( // user from useAuth()
                             <button
-                              onClick={() => handleDeleteUser(userData.id)}
+                              onClick={() => handleDeleteUser(currentListedUser.id)} // handleDeleteUser from hook
                               className="p-2.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200 group/btn"
                               title="Delete User"
                             >
@@ -953,7 +699,7 @@ export default function BranchesPage() {
               <h3 className="text-lg font-semibold text-slate-900 mb-2">No users found</h3>
               <p className="text-slate-500 mb-6">Start by adding administrators to manage your branches.</p>
               <button
-                onClick={() => setShowUserForm(true)}
+                onClick={openNewUserForm}
                 className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-kitchzero-primary to-kitchzero-secondary text-white rounded-xl hover:from-kitchzero-primary/90 hover:to-kitchzero-secondary/90 transition-all duration-200 font-semibold shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
               >
                 <UserPlus className="w-5 h-5" />

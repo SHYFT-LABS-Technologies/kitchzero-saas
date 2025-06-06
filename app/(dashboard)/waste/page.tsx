@@ -8,7 +8,7 @@ import { useWasteLogManagement, type WasteLogWithBranch, type SortFieldWaste, ty
 import { formatReason, getReasonIcon, getStatusBadge } from '@/lib/utils/wasteUtils';
 // FormField might be unused now if forms are fully custom or handled by a different component library
 // import { FormField } from "@/components/ui/form-field";
-import {
+// import { // This block is duplicated, remove it
 import {
   Plus,
   Trash2,

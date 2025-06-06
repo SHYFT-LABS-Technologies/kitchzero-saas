@@ -1,7 +1,14 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { useAuth } from "@/components/auth-provider"
+import { useAuth } from "@/components/auth-provider";
+import { useDashboardAnalytics, type TimeRange } from "@/lib/hooks/useDashboardAnalytics";
+import {
+  formatCurrency,
+  getChangeIcon,
+  getChangeColor,
+  getEfficiencyColor,
+  getTimeRangeLabel
+} from "@/lib/utils/dashboardUtils";
 import {
   TrendingDown,
   TrendingUp,
@@ -27,137 +34,54 @@ import {
   ChevronRight,
   TrendingDown as TrendDown,
   Award,
+import {
+  // TrendingDown, // Not directly used, getChangeIcon covers it
+  // TrendingUp, // Not directly used, getChangeIcon covers it
+  Package,
+  Trash2,
+  DollarSign,
+  AlertTriangle,
+  Target,
+  Users,
+  Building2,
+  BarChart3,
+  PieChart,
+  Activity,
+  Clock,
+  CheckCircle,
+  // ArrowUpRight, // In dashboardUtils
+  // ArrowDownRight, // In dashboardUtils
+  Zap,
+  Leaf,
+  // Minus, // In dashboardUtils
+  RefreshCw,
+  Calendar, // Used in dashboardUtils, but also potentially here if date pickers were more complex
+  ChevronRight,
+  // TrendDown, // alias for TrendingDown
+  Award,
   Sparkles,
-} from "lucide-react"
+} from "lucide-react";
 
-interface AnalyticsData {
-  // Current period totals
-  totalWasteKg: number
-  totalWasteLKR: number
-  totalWasteEntries: number
-
-  // Percentage changes
-  wasteChange: number
-  costChange: number
-
-  // Calculated metrics
-  efficiencyScore: number
-  costSavings: number
-
-  // Inventory data
-  totalInventoryItems: number
-  expiringItems: number
-
-  // Admin-only data
-  totalBranches: number
-  totalUsers: number
-
-  // Chart data
-  topWastedItems: Array<{
-    itemName: string
-    totalQuantity: number
-    totalValue: number
-  }>
-  wasteOverTime: Array<{
-    date: string
-    quantity: number
-    value: number
-  }>
-}
+// AnalyticsData type is now implicitly handled by the hook's return type if not exported from there
+// For clarity, if the hook exports it, it could be imported too.
 
 export default function DashboardPage() {
-  const { user } = useAuth()
-  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [timeRange, setTimeRange] = useState("today")
-  const [refreshing, setRefreshing] = useState(false)
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const { user } = useAuth();
+  const {
+    analytics,
+    loading,
+    error,
+    timeRange,
+    refreshing,
+    lastUpdated,
+    fetchAnalyticsData, // Renamed from fetchAnalytics for clarity if needed directly
+    handleRefresh,
+    setTimeRange,
+  } = useDashboardAnalytics();
 
-  useEffect(() => {
-    if (user) {
-      fetchAnalytics()
-    }
-  }, [timeRange, user])
+  // All helper functions (formatCurrency, getChangeIcon, etc.) are now imported from dashboardUtils.
 
-  const fetchAnalytics = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      console.log("🔄 Fetching analytics for user:", user?.username, "timeRange:", timeRange)
-
-      const response = await fetch(`/api/analytics?timeRange=${timeRange}`)
-
-      console.log("📡 Analytics response status:", response.status)
-
-      if (response.ok) {
-        const data = await response.json()
-        console.log("📊 Analytics data received:", data)
-        setAnalytics(data.analytics)
-        setLastUpdated(new Date())
-      } else {
-        const errorData = await response.json()
-        console.error("❌ Analytics API error:", errorData)
-        setError(errorData.error || "Failed to fetch analytics")
-      }
-    } catch (error) {
-      console.error("❌ Failed to fetch analytics:", error)
-      setError("Network error occurred")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleRefresh = async () => {
-    setRefreshing(true)
-    await fetchAnalytics()
-    setRefreshing(false)
-  }
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-LK", {
-      style: "currency",
-      currency: "LKR",
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount)
-  }
-
-  const getChangeIcon = (change: number) => {
-    if (change > 0) return <ArrowUpRight className="w-4 h-4 text-red-600" />
-    if (change < 0) return <ArrowDownRight className="w-4 h-4 text-green-600" />
-    return <Minus className="w-4 h-4 text-gray-500" />
-  }
-
-  const getChangeColor = (change: number, inverse = false) => {
-    if (change > 0) return inverse ? "text-green-600" : "text-red-600"
-    if (change < 0) return inverse ? "text-red-600" : "text-green-600"
-    return "text-gray-500"
-  }
-
-  const getEfficiencyColor = (score: number) => {
-    if (score >= 80) return "from-green-500 to-green-600"
-    if (score >= 60) return "from-yellow-500 to-yellow-600"
-    return "from-red-500 to-red-600"
-  }
-
-  const getTimeRangeLabel = (range: string) => {
-    switch (range) {
-      case "today":
-        return "Today"
-      case "7d":
-        return "Last 7 days"
-      case "30d":
-        return "Last 30 days"
-      case "90d":
-        return "Last 90 days"
-      default:
-        return "Today"
-    }
-  }
-
-  if (loading) {
+  if (loading && !analytics && !error) { // Adjusted loading condition
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50/30 p-6">
         <div className="max-w-7xl mx-auto">
@@ -189,7 +113,7 @@ export default function DashboardPage() {
           <h2 className="text-2xl font-bold text-gray-900 mb-4">Error Loading Dashboard</h2>
           <p className="text-gray-600 mb-6">{error}</p>
           <button 
-            onClick={fetchAnalytics} 
+            onClick={fetchAnalyticsData} // Use function from hook
             className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
           >
             Try Again
@@ -199,7 +123,7 @@ export default function DashboardPage() {
     )
   }
 
-  if (!analytics) {
+  if (!analytics && !loading) { // Adjusted condition for no data
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50/30 flex items-center justify-center p-6">
         <div className="text-center max-w-md mx-auto">
@@ -207,9 +131,9 @@ export default function DashboardPage() {
             <BarChart3 className="w-10 h-10 text-blue-600" />
           </div>
           <h2 className="text-2xl font-bold text-gray-900 mb-4">No Data Available</h2>
-          <p className="text-gray-600 mb-6">No analytics data found. Try running the seed script.</p>
+          <p className="text-gray-600 mb-6">No analytics data found for the selected period. Try a different time range or log some data.</p>
           <button 
-            onClick={fetchAnalytics} 
+            onClick={fetchAnalyticsData} // Use function from hook
             className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 text-white px-6 py-3 rounded-xl font-semibold transition-all duration-300 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
           >
             Refresh

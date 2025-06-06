@@ -6,7 +6,7 @@ import DeleteConfirmationModal from "@/components/ui/delete-confirmation-modal";
 import { ToastContainer, useToast } from "@/components/ui/toast-notification";
 import { useInventoryManagement, type InventoryItemWithBranch, type SortField } from '@/lib/hooks/useInventoryManagement';
 import { getStatusBadge } from '@/lib/utils/inventoryUtils';
-import {
+// import { // This block is duplicated, remove it
 import {
   Plus,
   Package,
