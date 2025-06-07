@@ -8,7 +8,7 @@ import {
   getChangeColor,
   getEfficiencyColor,
   getTimeRangeLabel
-} from "@/lib/utils/dashboardUtils";
+} from "@/lib/utils/dashboardUtils.tsx"; // Updated import path
 import {
   Sparkles,
   RefreshCw,
