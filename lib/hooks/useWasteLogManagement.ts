@@ -185,7 +185,7 @@ export function useWasteLogManagement(): UseWasteLogManagementReturn {
         addToast({ type: "success", title: "Data Refreshed", message: "All data has been refreshed." });
     }
     setLoading(false);
-  }, [user?.role, fetchWasteLogsInternal, fetchBranchesInternal, fetchReviewsInternal, addToast]);
+  }, [user?.role, fetchWasteLogsInternal, loadGlobalBranches, fetchReviewsInternal, addToast]);
 
   useEffect(() => {
     refreshAllData(false); // Initial fetch, no toast
