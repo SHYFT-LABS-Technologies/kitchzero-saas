@@ -10,56 +10,28 @@ import {
   getTimeRangeLabel
 } from "@/lib/utils/dashboardUtils";
 import {
-  TrendingDown,
-  TrendingUp,
-  Package,
-  Trash2,
-  DollarSign,
-  AlertTriangle,
-  Target,
-  Users,
-  Building2,
-  BarChart3,
-  PieChart,
-  Activity,
-  Clock,
-  CheckCircle,
-  ArrowUpRight,
-  ArrowDownRight,
-  Zap,
-  Leaf,
-  Minus,
-  RefreshCw,
-  Calendar,
-  ChevronRight,
-  TrendingDown as TrendDown,
-  Award,
-import {
-  // TrendingDown, // Not directly used, getChangeIcon covers it
-  // TrendingUp, // Not directly used, getChangeIcon covers it
-  Package,
-  Trash2,
-  DollarSign,
-  AlertTriangle,
-  Target,
-  Users,
-  Building2,
-  BarChart3,
-  PieChart,
-  Activity,
-  Clock,
-  CheckCircle,
-  // ArrowUpRight, // In dashboardUtils
-  // ArrowDownRight, // In dashboardUtils
-  Zap,
-  Leaf,
-  // Minus, // In dashboardUtils
-  RefreshCw,
-  Calendar, // Used in dashboardUtils, but also potentially here if date pickers were more complex
-  ChevronRight,
-  // TrendDown, // alias for TrendingDown
-  Award,
   Sparkles,
+  RefreshCw,
+  Trash2,
+  DollarSign,
+  Target,
+  Leaf,
+  Building2,
+  Users,
+  Package,
+  AlertTriangle,
+  BarChart3,
+  PieChart,
+  Activity,
+  Clock,
+  CheckCircle,
+  TrendingUp,
+  TrendingDown as TrendDown, // Alias used in JSX
+  Minus,
+  Zap,
+  ChevronRight,
+  Award
+  // ArrowUpRight, ArrowDownRight, Calendar are in dashboardUtils or not directly used
 } from "lucide-react";
 
 // AnalyticsData type is now implicitly handled by the hook's return type if not exported from there
