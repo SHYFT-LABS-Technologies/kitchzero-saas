@@ -1,4 +1,4 @@
-import type React from 'react';
+import React from 'react';
 import { AlertTriangle, Clock, TrendingUp } from 'lucide-react';
 
 /**

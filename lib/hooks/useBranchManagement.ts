@@ -280,7 +280,7 @@ export function useBranchManagement(): UseBranchManagementReturn {
       branchId: userToEdit.branchId || "",
     });
     setShowUserForm(true);
-  };
+  }, [authUser?.role, fetchGlobalBranchList]); // Added useCallback and dependencies
 
   return {
     branches,

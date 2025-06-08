@@ -8,7 +8,7 @@ import * as inventoryService from '@/lib/services/inventoryService';
 // Remove direct import of branchService if all branch fetching is via store for this hook
 // import * as branchService from '@/lib/services/branchService';
 import type { InventoryItem, Branch, InventoryData, ApiResponse, PaginatedApiResponse } from '@/lib/types';
-import { isExpired, isExpiringSoon } from '@/lib/utils/inventoryUtils';
+import { isExpired, isExpiringSoon } from '@/lib/utils/inventoryUtils.tsx'; // Updated import path
 
 export interface InventoryItemWithBranch extends InventoryItem {
   branch: Branch; // Ensure branch is always populated for display
