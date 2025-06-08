@@ -1,4 +1,4 @@
-import { fetchFromApi, fetchWithCsrf } from '@/lib/api-client';
+import { api, fetchWithCsrf } from '@/lib/api-client'; // Changed import
 import type { WasteLog, WasteLogData, DeletionReason, ApiResponse, PaginatedApiResponse } from '@/lib/types';
 
 const WASTE_LOG_API_BASE_URL = '/api/waste-logs';
@@ -8,7 +8,9 @@ const WASTE_LOG_API_BASE_URL = '/api/waste-logs';
  * @returns A promise that resolves to a paginated API response with waste logs.
  */
 export async function fetchWasteLogs(): Promise<PaginatedApiResponse<WasteLog[]>> {
-  return fetchFromApi<PaginatedApiResponse<WasteLog[]>>(`${WASTE_LOG_API_BASE_URL}`);
+  // Assuming the API endpoint /api/waste-logs returns data that matches PaginatedApiResponse<WasteLog[]>
+  // If it returns { wasteLogs: WasteLog[] }, then the hook or this service needs to adapt it.
+  return api.get<PaginatedApiResponse<WasteLog[]>>(`${WASTE_LOG_API_BASE_URL}`);
 }
 
 /**

@@ -1,4 +1,4 @@
-import { fetchFromApi, fetchWithCsrf } from '@/lib/api-client';
+import { api, fetchWithCsrf } from '@/lib/api-client'; // Changed import
 import type { Review, ReviewActionData, ApiResponse, PaginatedApiResponse } from '@/lib/types';
 
 const REVIEW_API_BASE_URL = '/api/reviews';
@@ -11,9 +11,8 @@ const REVIEW_API_BASE_URL = '/api/reviews';
  * @returns A promise that resolves to a paginated API response with reviews.
  */
 export async function fetchPendingReviews(): Promise<PaginatedApiResponse<Review[]>> {
-  // Assuming the API returns reviews that can be identified as pending.
-  // If the API supports a query parameter like /api/reviews?status=pending, that would be better.
-  return fetchFromApi<PaginatedApiResponse<Review[]>>(`${REVIEW_API_BASE_URL}?status=PENDING`); // Added status filter
+  // Assuming the API endpoint /api/reviews?status=PENDING returns data that matches PaginatedApiResponse<Review[]>
+  return api.get<PaginatedApiResponse<Review[]>>(`${REVIEW_API_BASE_URL}?status=PENDING`);
 }
 
 /**

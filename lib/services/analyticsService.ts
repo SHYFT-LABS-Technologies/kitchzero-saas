@@ -1,5 +1,5 @@
-import { fetchFromApi } from '@/lib/api-client';
-import type { AnalyticsData, ApiResponse } from '@/lib/types'; // Assuming AnalyticsData is part of overall ApiResponse
+import { api } from '@/lib/api-client'; // Changed import
+import type { AnalyticsData } from '@/lib/types'; // ApiResponse wrapper might not be needed if api.get returns data directly
 
 const ANALYTICS_API_BASE_URL = '/api/analytics';
 
@@ -10,36 +10,12 @@ const ANALYTICS_API_BASE_URL = '/api/analytics';
  */
 export async function fetchAnalytics(
   timeRange: 'today' | '7d' | '30d' | '90d'
-): Promise<ApiResponse<AnalyticsData>> { // The API returns { analytics: AnalyticsData }
-  const response = await fetchFromApi<{ analytics: AnalyticsData }>(`${ANALYTICS_API_BASE_URL}?timeRange=${timeRange}`);
-  // The actual API returns { analytics: AnalyticsData }, so we need to wrap it in a standard ApiResponse structure if needed,
-  // or adjust the return type. For now, let's assume the component using this service expects AnalyticsData directly
-  // or the ApiResponse structure matches.
-  // Based on current api-client, fetchFromApi returns T directly.
-  // The /api/analytics route returns NextResponse.json({ analytics: data })
-  // So, the service should return this structure.
-  return response; // This will be { analytics: AnalyticsData }
+): Promise<{ analytics: AnalyticsData }> { // Adjusted return type
+  // api.get will return the data structure directly, which is { analytics: AnalyticsData }
+  // as defined by the server's response in app/api/analytics/route.ts
+  const response = await api.get<{ analytics: AnalyticsData }>(`${ANALYTICS_API_BASE_URL}?timeRange=${timeRange}`);
+  return response;
 }
 
-/**
- * Specific type for the direct response from /api/analytics.
- * This can be used by components that consume fetchAnalytics.
- */
-export type AnalyticsApiResponse = {
-  analytics: AnalyticsData;
-};
-
-// If a more standardized ApiResponse<AnalyticsData> is needed by consumers,
-// then fetchAnalytics should be:
-/*
-export async function fetchAnalytics(
-  timeRange: 'today' | '7d' | '30d' | '90d'
-): Promise<ApiResponse<AnalyticsData>> {
-  const result = await fetchFromApi<{ analytics: AnalyticsData }>(`${ANALYTICS_API_BASE_URL}?timeRange=${timeRange}`);
-  return {
-    success: true, // Assuming success if no error is thrown
-    data: result.analytics,
-    message: "Analytics data fetched successfully" // Optional message
-  };
-}
-*/
+// AnalyticsApiResponse type is removed as the function now directly returns the expected object.
+// The commented-out alternative implementation is also no longer relevant with api.get.

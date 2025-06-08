@@ -1,4 +1,4 @@
-import { fetchFromApi, fetchWithCsrf } from '@/lib/api-client';
+import { api, fetchWithCsrf } from '@/lib/api-client'; // Changed import
 import type { Branch, BranchData, ApiResponse, PaginatedApiResponse } from '@/lib/types';
 
 const BRANCH_API_BASE_URL = '/api/branches';
@@ -8,7 +8,9 @@ const BRANCH_API_BASE_URL = '/api/branches';
  * @returns A promise that resolves to a paginated API response with branches.
  */
 export async function fetchBranches(): Promise<PaginatedApiResponse<Branch[]>> {
-  return fetchFromApi<PaginatedApiResponse<Branch[]>>(`${BRANCH_API_BASE_URL}`);
+  // Assuming the API endpoint /api/branches returns data that matches PaginatedApiResponse<Branch[]>
+  // If it returns { branches: Branch[] }, then the hook or this service needs to adapt it.
+  return api.get<PaginatedApiResponse<Branch[]>>(`${BRANCH_API_BASE_URL}`);
 }
 
 /**

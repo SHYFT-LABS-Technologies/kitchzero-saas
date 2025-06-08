@@ -1,4 +1,4 @@
-import { fetchFromApi, fetchWithCsrf } from '@/lib/api-client';
+import { api, fetchWithCsrf } from '@/lib/api-client'; // Changed import
 import type { InventoryItem, InventoryData, ApiResponse, PaginatedApiResponse } from '@/lib/types';
 
 const INVENTORY_API_BASE_URL = '/api/inventory';
@@ -8,7 +8,10 @@ const INVENTORY_API_BASE_URL = '/api/inventory';
  * @returns A promise that resolves to a paginated API response with inventory items.
  */
 export async function fetchInventory(): Promise<PaginatedApiResponse<InventoryItem[]>> {
-  return fetchFromApi<PaginatedApiResponse<InventoryItem[]>>(`${INVENTORY_API_BASE_URL}`);
+  // Assuming the API endpoint /api/inventory returns data that matches PaginatedApiResponse<InventoryItem[]>
+  // If it returns { inventory: InventoryItem[] }, then the hook or this service needs to adapt it.
+  // For now, we keep the return type and assume api.get can fetch this structure.
+  return api.get<PaginatedApiResponse<InventoryItem[]>>(`${INVENTORY_API_BASE_URL}`);
 }
 
 /**
